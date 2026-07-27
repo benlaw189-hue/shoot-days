@@ -34,19 +34,21 @@
     font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
     color: var(--ink3); margin-bottom: 6px;
   }
-  input {
+  input, select {
     width: 100%; box-sizing: border-box; padding: 11px 12px; margin-bottom: 14px;
     font-family: inherit; font-size: 16px;
     background: var(--card); color: var(--ink);
     border: 1px solid var(--rule); border-radius: 0;
   }
-  input:focus { outline: 2px solid var(--ink); outline-offset: -1px; }
+  select { -webkit-appearance: none; appearance: none; }
+  input:focus, select:focus { outline: 2px solid var(--ink); outline-offset: -1px; }
   button {
     width: 100%; padding: 12px; font-family: inherit; font-size: 15px;
     text-transform: uppercase; letter-spacing: 0.08em;
     background: var(--ink); color: var(--paper); border: none; cursor: pointer;
   }
   button:hover { background: var(--stamp); }
+  button:disabled { background: var(--ink3); cursor: default; }
   button.quiet {
     background: none; color: var(--ink2); border: 1px solid var(--rule);
     font-size: 12px; padding: 9px;
@@ -57,11 +59,24 @@
     background: #F7E4E1; border-left: 3px solid var(--stamp); color: #7A2A1E;
     padding: 11px 13px; margin-bottom: 14px; font-size: 13px; line-height: 1.5;
   }
+  .flash {
+    background: #E3EBDF; border-left: 3px solid #4A7A42; color: #2F5429;
+    padding: 11px 13px; margin-bottom: 14px; font-size: 13px; line-height: 1.5;
+  }
   .hidden { display: none; }
   .who {
     font-family: var(--mono);
     font-size: 13px; word-break: break-all; margin-bottom: 20px;
   }
+
+  /* ---- add a shoot ---- */
+  #newshoot {
+    border: 1px solid var(--ink); padding: 16px 16px 6px;
+    margin-bottom: 20px;
+  }
+  .pair { display: flex; gap: 10px; }
+  .pair > div { flex: 1; min-width: 0; }
+  #openform { margin-bottom: 20px; }
 
   /* ---- the shoot list ---- */
   .listhead {
@@ -137,6 +152,51 @@
   </form>
 
   <div id="app" class="hidden">
+
+    <div id="flash" class="flash hidden"></div>
+
+    <button id="openform">Add a shoot</button>
+
+    <form id="newshoot" class="hidden">
+      <div id="formerror" class="error hidden"></div>
+
+      <div class="pair">
+        <div>
+          <div class="label">Date</div>
+          <input type="date" id="f_date" required>
+        </div>
+        <div>
+          <div class="label">Call time</div>
+          <input type="time" id="f_time">
+        </div>
+      </div>
+
+      <div class="label">Venue</div>
+      <input type="text" id="f_venue" autocomplete="off" required>
+
+      <div class="label">Client</div>
+      <input type="text" id="f_client" autocomplete="off">
+
+      <div class="pair">
+        <div>
+          <div class="label">Fee &pound;</div>
+          <input type="number" id="f_fee" min="0" step="1" inputmode="decimal">
+        </div>
+        <div>
+          <div class="label">Job type</div>
+          <select id="f_type"></select>
+        </div>
+      </div>
+
+      <div class="label">Status</div>
+      <select id="f_status"></select>
+
+      <button type="submit" id="save">Save shoot</button>
+      <div style="height:8px"></div>
+      <button type="button" class="quiet" id="cancel">Cancel</button>
+      <div style="height:10px"></div>
+    </form>
+
     <div class="listhead">
       <span class="label" style="margin:0">Coming up</span>
       <span class="count" id="count"></span>
@@ -161,6 +221,11 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 const SUPABASE_URL = 'https://ipjrkpwolsbukjztyguh.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_tFapTFCQ8GnPvcQWrTr47Q_tJv44iL0';
 // ============================================================
+
+// The options in the two dropdowns. These must match what the database
+// will accept. Add or rename freely — the list is the only place they live.
+const JOB_TYPES = ['wedding', 'corporate', 'event', 'music video', 'commercial', 'property'];
+const STATUSES  = ['pencilled', 'confirmed', 'delivered', 'invoiced', 'paid'];
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -212,6 +277,43 @@ function showError(message) {
   show('error');
 }
 
+// Today, in the local calendar rather than UTC.
+function todayISO() {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+    .toISOString().slice(0, 10);
+}
+
+let flashTimer = null;
+function flash(message) {
+  el('flash').textContent = message;
+  show('flash');
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => hide('flash'), 6000);
+}
+
+// The team this signed-in person belongs to. Needed on insert so the
+// row passes the security policies. Stays null if we can't find it.
+let teamId = null;
+
+async function loadTeamId(userId) {
+  teamId = null;
+  let result = await supabase.from('profiles').select('team_id').eq('id', userId).maybeSingle();
+  if (result.error || !result.data) {
+    result = await supabase.from('profiles').select('team_id').eq('user_id', userId).maybeSingle();
+  }
+  if (result.data && result.data.team_id) teamId = result.data.team_id;
+}
+
+function fillSelect(id, values) {
+  el(id).innerHTML = values
+    .map((v) => `<option value="${escapeText(v)}">${escapeText(v.charAt(0).toUpperCase() + v.slice(1))}</option>`)
+    .join('');
+}
+
+fillSelect('f_type', JOB_TYPES);
+fillSelect('f_status', STATUSES);
+
 async function render(session) {
   hide('loading');
   if (!session) {
@@ -222,16 +324,15 @@ async function render(session) {
   hide('login');
   show('app');
   el('who').textContent = session.user.email;
+  await loadTeamId(session.user.id);
   loadShoots();
 }
 
 async function loadShoots() {
-  const today = new Date().toISOString().slice(0, 10);
-
   const { data, error } = await supabase
     .from('shoots')
     .select('id, shoot_date, call_time, venue, client, fee, job_type, status')
-    .gte('shoot_date', today)
+    .gte('shoot_date', todayISO())
     .order('shoot_date', { ascending: true });
 
   if (error) {
@@ -266,6 +367,76 @@ async function loadShoots() {
     </div>
   `).join('');
 }
+
+// ---- add a shoot ----
+
+function openForm() {
+  hide('formerror');
+  hide('flash');
+  el('newshoot').reset();
+  fillSelect('f_type', JOB_TYPES);
+  fillSelect('f_status', STATUSES);
+  el('f_date').value = todayISO();
+  show('newshoot');
+  hide('openform');
+  el('f_venue').focus();
+}
+
+function closeForm() {
+  hide('newshoot');
+  show('openform');
+}
+
+el('openform').addEventListener('click', openForm);
+el('cancel').addEventListener('click', closeForm);
+
+el('newshoot').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  hide('formerror');
+
+  const date  = el('f_date').value;
+  const venue = el('f_venue').value.trim();
+  const fee   = el('f_fee').value.trim();
+
+  if (!date || !venue) {
+    el('formerror').textContent = 'A date and a venue are needed before this can be saved.';
+    show('formerror');
+    return;
+  }
+
+  const row = {
+    shoot_date: date,
+    call_time:  el('f_time').value || null,
+    venue:      venue,
+    client:     el('f_client').value.trim() || null,
+    fee:        fee === '' ? null : Number(fee),
+    job_type:   el('f_type').value,
+    status:     el('f_status').value
+  };
+  if (teamId) row.team_id = teamId;
+
+  el('save').disabled = true;
+  el('save').textContent = 'Saving…';
+
+  const { error } = await supabase.from('shoots').insert(row);
+
+  el('save').disabled = false;
+  el('save').textContent = 'Save shoot';
+
+  if (error) {
+    el('formerror').textContent = error.message + (error.hint ? ' — ' + error.hint : '');
+    show('formerror');
+    return;
+  }
+
+  closeForm();
+  flash(date < todayISO()
+    ? venue + ' saved. The date has passed, so it sits below Coming up rather than in it.'
+    : venue + ' added to the schedule.');
+  loadShoots();
+});
+
+// ---- auth ----
 
 el('login').addEventListener('submit', async (event) => {
   event.preventDefault();
