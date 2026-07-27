@@ -142,8 +142,6 @@ async function countShoots() {
     return;
   }
   el('count').textContent = count;
-  el('countnote').textContent = count === 0
-    : 'The permission rules are letting rows through.';
 }
 
 el('login').addEventListener('submit', async (event) => {
