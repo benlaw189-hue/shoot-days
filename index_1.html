@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shoot Days</title>
+<style>
+  body {
+    margin: 0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background: #E7E8E1; color: #1B1D19;
+    font-family: system-ui, -apple-system, sans-serif;
+    padding: 24px;
+  }
+  main { width: 100%; max-width: 380px; }
+  h1 {
+    font-size: 40px; line-height: 0.95; letter-spacing: 0.01em;
+    text-transform: uppercase; margin: 0 0 16px;
+  }
+  .rule { height: 5px; display: flex; margin-bottom: 22px; }
+  .rule span { flex: 1; }
+  .label {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #8A8D82; margin-bottom: 6px;
+  }
+  input {
+    width: 100%; box-sizing: border-box; padding: 11px 12px; margin-bottom: 14px;
+    font-family: inherit; font-size: 16px;
+    background: #F2F2ED; color: #1B1D19;
+    border: 1px solid #C9CBC0; border-radius: 0;
+  }
+  input:focus { outline: 2px solid #1B1D19; outline-offset: -1px; }
+  button {
+    width: 100%; padding: 12px; font-family: inherit; font-size: 15px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    background: #1B1D19; color: #E7E8E1; border: none; cursor: pointer;
+  }
+  button:hover { background: #A83A2B; }
+  button.quiet {
+    background: none; color: #55584F; border: 1px solid #C9CBC0;
+    font-size: 12px; padding: 9px;
+  }
+  button.quiet:hover { background: #F2F2ED; color: #1B1D19; }
+  p { font-size: 14px; line-height: 1.6; margin: 0 0 12px; }
+  .note {
+    background: #F2F2ED; border-left: 3px solid #C9CBC0;
+    padding: 12px 14px; margin: 20px 0; font-size: 13px; line-height: 1.6;
+  }
+  .error {
+    background: #F7E4E1; border-left: 3px solid #A83A2B; color: #7A2A1E;
+    padding: 11px 13px; margin-bottom: 14px; font-size: 13px; line-height: 1.5;
+  }
+  .hidden { display: none; }
+  .who {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13px; word-break: break-all; margin-bottom: 20px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="label">Production schedule</div>
+  <h1>Shoot<br>days</h1>
+  <div class="rule">
+    <span style="background:#B8577A"></span>
+    <span style="background:#3E6FA8"></span>
+    <span style="background:#C09024"></span>
+    <span style="background:#5E8C56"></span>
+    <span style="background:#8A6BA8"></span>
+    <span style="background:#B0603A"></span>
+  </div>
+
+  <div id="loading"><p>Loading&hellip;</p></div>
+
+  <form id="login" class="hidden">
+    <div id="error" class="error hidden"></div>
+    <div class="label">Email</div>
+    <input type="email" id="email" autocomplete="username" required>
+    <div class="label">Password</div>
+    <input type="password" id="password" autocomplete="current-password" required>
+    <button type="submit" id="signin">Sign in</button>
+  </form>
+
+  <div id="app" class="hidden">
+    <div class="label">Signed in as</div>
+    <div class="who" id="who"></div>
+
+    <div class="note">
+      <strong>Shoots you can see: <span id="count">&hellip;</span></strong><br>
+      <span id="countnote"></span>
+    </div>
+
+    <button class="quiet" id="signout">Sign out</button>
+  </div>
+</main>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+// ============================================================
+// Supabase dashboard -> Settings -> API Keys
+// Use the PUBLISHABLE key (sb_publishable_...). Never the secret one.
+// ============================================================
+const SUPABASE_URL = 'https://ipjrkpwolsbukjztyguh.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_tFapTFCQ8GnPvcQWrTr47Q_tJv44iL0';
+// ============================================================
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const el = (id) => document.getElementById(id);
+const show = (id) => el(id).classList.remove('hidden');
+const hide = (id) => el(id).classList.add('hidden');
+
+function showError(message) {
+  el('error').textContent = message;
+  show('error');
+}
+
+async function render(session) {
+  hide('loading');
+  if (!session) {
+    hide('app');
+    show('login');
+    return;
+  }
+  hide('login');
+  show('app');
+  el('who').textContent = session.user.email;
+  countShoots();
+}
+
+async function countShoots() {
+  const { count, error } = await supabase
+    .from('shoots')
+    .select('*', { count: 'exact', head: true });
+
+  if (error) {
+    el('count').textContent = '—';
+    el('countnote').textContent = 'Error: ' + error.message;
+    return;
+  }
+  el('count').textContent = count;
+}
+
+el('login').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  hide('error');
+  el('signin').disabled = true;
+  el('signin').textContent = 'Signing in…';
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: el('email').value.trim(),
+    password: el('password').value
+  });
+
+  el('signin').disabled = false;
+  el('signin').textContent = 'Sign in';
+  if (error) showError(error.message);
+});
+
+el('signout').addEventListener('click', async () => {
+  await supabase.auth.signOut();
+});
+
+supabase.auth.onAuthStateChange((_event, session) => render(session));
+
+const { data } = await supabase.auth.getSession();
+render(data.session);
+</script>
+</body>
+</html>
