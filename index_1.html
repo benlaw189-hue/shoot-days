@@ -5,14 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shoot Days</title>
 <style>
+  :root {
+    --paper: #E7E8E1;
+    --card:  #F2F2ED;
+    --ink:   #1B1D19;
+    --ink2:  #55584F;
+    --ink3:  #8A8D82;
+    --rule:  #C9CBC0;
+    --stamp: #A83A2B;
+    --mono:  ui-monospace, Menlo, Consolas, monospace;
+  }
   body {
     margin: 0; min-height: 100vh;
     display: flex; align-items: center; justify-content: center;
-    background: #E7E8E1; color: #1B1D19;
+    background: var(--paper); color: var(--ink);
     font-family: system-ui, -apple-system, sans-serif;
     padding: 24px;
   }
-  main { width: 100%; max-width: 380px; }
+  main { width: 100%; max-width: 560px; }
   h1 {
     font-size: 40px; line-height: 0.95; letter-spacing: 0.01em;
     text-transform: uppercase; margin: 0 0 16px;
@@ -20,42 +30,86 @@
   .rule { height: 5px; display: flex; margin-bottom: 22px; }
   .rule span { flex: 1; }
   .label {
-    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-family: var(--mono);
     font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
-    color: #8A8D82; margin-bottom: 6px;
+    color: var(--ink3); margin-bottom: 6px;
   }
   input {
     width: 100%; box-sizing: border-box; padding: 11px 12px; margin-bottom: 14px;
     font-family: inherit; font-size: 16px;
-    background: #F2F2ED; color: #1B1D19;
-    border: 1px solid #C9CBC0; border-radius: 0;
+    background: var(--card); color: var(--ink);
+    border: 1px solid var(--rule); border-radius: 0;
   }
-  input:focus { outline: 2px solid #1B1D19; outline-offset: -1px; }
+  input:focus { outline: 2px solid var(--ink); outline-offset: -1px; }
   button {
     width: 100%; padding: 12px; font-family: inherit; font-size: 15px;
     text-transform: uppercase; letter-spacing: 0.08em;
-    background: #1B1D19; color: #E7E8E1; border: none; cursor: pointer;
+    background: var(--ink); color: var(--paper); border: none; cursor: pointer;
   }
-  button:hover { background: #A83A2B; }
+  button:hover { background: var(--stamp); }
   button.quiet {
-    background: none; color: #55584F; border: 1px solid #C9CBC0;
+    background: none; color: var(--ink2); border: 1px solid var(--rule);
     font-size: 12px; padding: 9px;
   }
-  button.quiet:hover { background: #F2F2ED; color: #1B1D19; }
+  button.quiet:hover { background: var(--card); color: var(--ink); }
   p { font-size: 14px; line-height: 1.6; margin: 0 0 12px; }
-  .note {
-    background: #F2F2ED; border-left: 3px solid #C9CBC0;
-    padding: 12px 14px; margin: 20px 0; font-size: 13px; line-height: 1.6;
-  }
   .error {
-    background: #F7E4E1; border-left: 3px solid #A83A2B; color: #7A2A1E;
+    background: #F7E4E1; border-left: 3px solid var(--stamp); color: #7A2A1E;
     padding: 11px 13px; margin-bottom: 14px; font-size: 13px; line-height: 1.5;
   }
   .hidden { display: none; }
   .who {
-    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-family: var(--mono);
     font-size: 13px; word-break: break-all; margin-bottom: 20px;
   }
+
+  /* ---- the shoot list ---- */
+  .listhead {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 1.5px solid var(--ink); padding-bottom: 6px; margin-bottom: 0;
+  }
+  .shoot {
+    display: flex; gap: 14px;
+    border-bottom: 1px solid var(--rule);
+    padding: 13px 0 13px 12px;
+    border-left: 4px solid var(--ink3);
+    background: var(--card);
+    margin-bottom: 1px;
+  }
+  .shoot .when { min-width: 92px; }
+  .shoot .date {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink);
+  }
+  .shoot .time {
+    font-family: var(--mono); font-size: 11px; color: var(--ink3); margin-top: 3px;
+  }
+  .shoot .mid { flex: 1; min-width: 0; }
+  .shoot .venue { font-size: 15px; font-weight: 600; line-height: 1.25; }
+  .shoot .client { font-size: 13px; color: var(--ink2); margin-top: 2px; }
+  .shoot .type {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink3); margin-top: 5px;
+  }
+  .shoot .end {
+    text-align: right; display: flex; flex-direction: column;
+    justify-content: center; gap: 6px; min-width: 96px; padding-right: 12px;
+  }
+  .shoot .fee { font-family: var(--mono); font-size: 17px; }
+  .shoot .status {
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em;
+    text-transform: uppercase; border: 1px solid currentColor;
+    padding: 1px 5px; align-self: flex-end;
+  }
+  .empty {
+    padding: 26px 14px; text-align: center; color: var(--ink2);
+    font-size: 14px; background: var(--card); border-bottom: 1px solid var(--rule);
+  }
+  .count {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink3);
+  }
+  .spacer { height: 24px; }
 </style>
 </head>
 <body>
@@ -83,14 +137,16 @@
   </form>
 
   <div id="app" class="hidden">
-    <div class="label">Signed in as</div>
-    <div class="who" id="who"></div>
-
-    <div class="note">
-      <strong>Shoots you can see: <span id="count">&hellip;</span></strong><br>
-      <span id="countnote"></span>
+    <div class="listhead">
+      <span class="label" style="margin:0">Coming up</span>
+      <span class="count" id="count"></span>
     </div>
 
+    <div id="list"></div>
+
+    <div class="spacer"></div>
+    <div class="label">Signed in as</div>
+    <div class="who" id="who"></div>
     <button class="quiet" id="signout">Sign out</button>
   </div>
 </main>
@@ -112,6 +168,45 @@ const el = (id) => document.getElementById(id);
 const show = (id) => el(id).classList.remove('hidden');
 const hide = (id) => el(id).classList.add('hidden');
 
+// Colour down the left edge of each row, by job type.
+const TYPE_COLOUR = {
+  'wedding':     '#B8577A',
+  'corporate':   '#3E6FA8',
+  'event':       '#C09024',
+  'music video': '#5E8C56',
+  'commercial':  '#8A6BA8',
+  'property':    '#B0603A'
+};
+
+function statusColour(status) {
+  if (status === 'paid') return '#4A7A42';
+  if (status === 'invoiced' || status === 'delivered') return '#A83A2B';
+  return '#55584F';
+}
+
+// '2026-08-15' -> 'SAT 15 AUG'
+function longDate(value) {
+  const [y, m, d] = value.split('-').map(Number);
+  return new Date(y, m - 1, d)
+    .toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+    .toUpperCase();
+}
+
+// '13:00:00' -> '13:00'
+function shortTime(value) {
+  return value ? value.slice(0, 5) : '';
+}
+
+function money(value) {
+  return '£' + Number(value || 0).toLocaleString('en-GB', { maximumFractionDigits: 0 });
+}
+
+function escapeText(value) {
+  const node = document.createElement('div');
+  node.textContent = value == null ? '' : value;
+  return node.innerHTML;
+}
+
 function showError(message) {
   el('error').textContent = message;
   show('error');
@@ -127,20 +222,49 @@ async function render(session) {
   hide('login');
   show('app');
   el('who').textContent = session.user.email;
-  countShoots();
+  loadShoots();
 }
 
-async function countShoots() {
-  const { count, error } = await supabase
+async function loadShoots() {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { data, error } = await supabase
     .from('shoots')
-    .select('*', { count: 'exact', head: true });
+    .select('id, shoot_date, call_time, venue, client, fee, job_type, status')
+    .gte('shoot_date', today)
+    .order('shoot_date', { ascending: true });
 
   if (error) {
-    el('count').textContent = '—';
-    el('countnote').textContent = 'Error: ' + error.message;
+    el('list').innerHTML = '<div class="error">Error: ' + escapeText(error.message) + '</div>';
+    el('count').textContent = '';
     return;
   }
-  el('count').textContent = count;
+
+  if (!data.length) {
+    el('list').innerHTML = '<div class="empty">Nothing booked in yet.</div>';
+    el('count').textContent = '0 days';
+    return;
+  }
+
+  el('count').textContent = data.length + (data.length === 1 ? ' day' : ' days');
+
+  el('list').innerHTML = data.map((shoot) => `
+    <div class="shoot" style="border-left-color:${TYPE_COLOUR[shoot.job_type] || '#8A8D82'}">
+      <div class="when">
+        <div class="date">${longDate(shoot.shoot_date)}</div>
+        <div class="time">${escapeText(shortTime(shoot.call_time))}</div>
+      </div>
+      <div class="mid">
+        <div class="venue">${escapeText(shoot.venue)}</div>
+        <div class="client">${escapeText(shoot.client || '—')}</div>
+        <div class="type">${escapeText(shoot.job_type)}</div>
+      </div>
+      <div class="end">
+        <div class="fee">${money(shoot.fee)}</div>
+        <div class="status" style="color:${statusColour(shoot.status)}">${escapeText(shoot.status)}</div>
+      </div>
+    </div>
+  `).join('');
 }
 
 el('login').addEventListener('submit', async (event) => {
