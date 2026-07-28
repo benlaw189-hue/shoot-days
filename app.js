@@ -56,7 +56,7 @@ const ME = {
   company: 'BGL Media',
   address: '4, Bodmin Ave, Southport, PR9 9TU',
   phone:   '+44 7585 430643',
-  email:   'benlaw@bglmedia.uk',
+  email:   'ben@bglmedia.co.uk',
 
   // Invoice numbers are this, then three digits: BGLM001, BGLM002...
   prefix:  'BGLM',
