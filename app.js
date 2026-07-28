@@ -81,6 +81,43 @@ const CREW = [
 ];
 
 // ============================================================
+// The kit list.
+//
+// Nine headings would be nine near-empty lists. These eight are your nine
+// with the pairs that always get packed together folded into one line:
+// mics and recorders are both Audio, tripods and magic arms are both
+// Support, batteries and chargers are both Power. Nothing is lost — the
+// `hint` is what the dropdown reads out, so 'magic arms' is still a word
+// on the screen when you're deciding where something goes.
+//
+// `value` is what's stored, so once you've used a word don't rename it —
+// add a new line instead, same rule as the crew tags. `accent` names a
+// slot in the palette at the top of styles.css. The order of this list
+// is the order the groups come down the screen.
+// ============================================================
+const KIT_CATEGORIES = [
+  { value: 'camera',   word: 'Cameras',  hint: 'bodies and cages',                  accent: '--accent-1' },
+  { value: 'lens',     word: 'Lenses',   hint: 'glass, adapters, filters',          accent: '--accent-2' },
+  { value: 'audio',    word: 'Audio',    hint: 'mics, radio kits, recorders',       accent: '--accent-3' },
+  { value: 'lighting', word: 'Lighting', hint: 'lamps, modifiers, stands',          accent: '--accent-4' },
+  { value: 'support',  word: 'Support',  hint: 'tripods, magic arms, clamps, gimbals', accent: '--accent-5' },
+  { value: 'power',    word: 'Power',    hint: 'batteries, chargers, plates',       accent: '--accent-6' },
+  { value: 'storage',  word: 'Storage',  hint: 'cards, readers, drives',            accent: '--status-blue' },
+  { value: 'other',    word: 'Other',    hint: 'cables, bags, everything else',     accent: '--neutral' }
+];
+
+// ============================================================
+// Who gets the Kit screen. Matched against the `role` on a profile,
+// ignoring capitals and spare spaces, so 'BGL', 'bgl' and 'Videographer'
+// all count. An owner always gets it whatever their role says, so nobody
+// can lock themselves out of their own kit list by mistyping a word.
+//
+// This only decides what the menu offers. kit.sql is what actually
+// refuses — same arrangement as invoices and the money tracker.
+// ============================================================
+const KIT_ROLES = ['bgl', 'videographer'];
+
+// ============================================================
 // EDIT THESE. The email each of you signs in with, and the tag the form
 // should pick by default. Purely a convenience — it saves a tap, it does
 // not stop anyone tagging a job to anyone.
@@ -129,6 +166,10 @@ let isOwner = false;
 // Am I allowed to invoice? Same story. Hiding the menu item is tidiness;
 // the row-level rules in invoices.sql are the actual lock.
 let canInvoice = false;
+
+// Am I allowed to see the kit list? Worked out from the role on my
+// profile against KIT_ROLES above. Same story again: kit.sql is the lock.
+let canKit = false;
 
 // shoot_id -> { actual_fee, shared }. For a non-owner this only ever holds
 // the jobs that have been unlocked, because the rest never arrive.
@@ -381,13 +422,13 @@ function flash(message) {
 
 // ---- which screen is showing ----
 
-const SCREENS = ['home', 'shoots', 'calendar', 'invoices', 'money', 'more'];
+const SCREENS = ['home', 'shoots', 'calendar', 'invoices', 'money', 'kit', 'more'];
 
-// Invoices, Money and Account all live behind the More menu, so all three
-// light up the More tab. Everything else lights up its own.
+// Invoices, Money, Kit and Account all live behind the More menu, so all
+// four light up the More tab. Everything else lights up its own.
 const TAB_FOR = {
   home: 'home', shoots: 'shoots', calendar: 'calendar',
-  invoices: 'more', money: 'more', more: 'more'
+  invoices: 'more', money: 'more', kit: 'more', more: 'more'
 };
 
 function goto(name) {
@@ -465,6 +506,7 @@ async function loadProfile(userId) {
   teamId = null;
   isOwner = false;
   canInvoice = false;
+  canKit = false;
 
   const { data } = await supabase
     .from('profiles')
@@ -475,6 +517,7 @@ async function loadProfile(userId) {
   if (data) {
     teamId = data.team_id || null;
     canInvoice = data.can_invoice === true;
+    canKit = KIT_ROLES.includes(String(data.role || '').trim().toLowerCase());
     el('whoname').textContent = data.full_name || '';
     el('whotitle').textContent = data.title || data.role || '';
   }
@@ -485,11 +528,15 @@ async function loadProfile(userId) {
   const owner = await supabase.rpc('is_team_owner');
   isOwner = owner.data === true;
 
+  // An owner always gets the kit list, whatever their role happens to say.
+  if (isOwner) canKit = true;
+
   el('clientfee').classList.toggle('hidden', !isOwner);
   el('feelabel').innerHTML = isOwner ? 'Fee on schedule &pound;' : 'Fee &pound;';
 
   el('mi_invoices').classList.toggle('hidden', !canInvoice);
   el('mi_money').classList.toggle('hidden', !canInvoice);
+  el('mi_kit').classList.toggle('hidden', !canKit);
 }
 
 function fillSelect(id, values) {
@@ -548,7 +595,7 @@ const COLUMNS = 'id, shoot_date, call_time, venue, client, fee, job_type, status
 // the schedule fee where the client fee belongs and then corrects itself.
 async function refresh() {
   await loadFees();
-  await Promise.all([loadAll(), loadShoots(), loadInvoices(), loadEntries()]);
+  await Promise.all([loadAll(), loadShoots(), loadInvoices(), loadEntries(), loadKit()]);
 
   // The tracker reads invoices and entries together, so it draws once both
   // have landed rather than twice, half-finished.
@@ -2866,6 +2913,474 @@ el('downloadcsv').addEventListener('click', () => {
   link.href = url;
   link.download = safeFilename('BGL Media I&E '
     + (moneyYear == null ? 'all years' : taxYearLabel(moneyYear))) + '.csv';
+  link.click();
+
+  URL.revokeObjectURL(url);
+});
+
+// ============================================================
+// The kit list
+//
+// One list between the two of you, grouped by what a thing is, tagged
+// with whose it is. Those are two different questions and they get two
+// different answers, which is why ownership is a tag on the item rather
+// than a list each: a camera changing hands is one tap, not a cut and
+// paste between two lists that then disagree.
+//
+// Value is per piece, and the count is separate, so five cards at £90
+// is one line and not five. Every total on the screen is value times
+// count — which is the number an insurer asks for.
+//
+// Nothing in here can be reached by anyone whose profile role isn't on
+// KIT_ROLES at the top of this file. Hiding the menu item is tidiness;
+// kit.sql is what actually refuses.
+// ============================================================
+
+let kit = [];
+
+let kitCat = 'any';
+let kitOwner = 'any';
+let kitSearch = '';
+
+const KIT_COLUMNS = 'id, name, category, owner_tag, value, qty, serial, notes';
+
+function kitCategory(value) {
+  return KIT_CATEGORIES.find((c) => c.value === value) || null;
+}
+
+// The word for a category we've since deleted from the list above is the
+// word itself, tidied up — same as a job type that's been renamed.
+function kitCategoryWord(value) {
+  const entry = kitCategory(value);
+  return entry ? entry.word : titleCase(value || 'other');
+}
+
+function kitCategoryColour(value) {
+  const entry = kitCategory(value);
+  return entry ? `var(${entry.accent})` : 'var(--ink3)';
+}
+
+// What one line is worth: what it cost to replace one of them, times how
+// many of them there are.
+function kitLineValue(item) {
+  if (item.value == null) return 0;
+  return Number(item.value) * kitQty(item);
+}
+
+function kitQty(item) {
+  const n = Number(item.qty || 1);
+  return n > 0 ? Math.round(n) : 1;
+}
+
+async function loadKit() {
+  // Asking at all would only ever come back empty, and an error box on a
+  // screen you can't open isn't worth drawing.
+  if (!canKit) {
+    kit = [];
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from('kit')
+    .select(KIT_COLUMNS)
+    .order('name', { ascending: true });
+
+  if (error) {
+    kit = [];
+    el('kitlist').innerHTML = '<div class="error">Error: ' + escapeText(error.message) + '</div>';
+    el('kitcount').textContent = '';
+    return;
+  }
+
+  kit = data || [];
+  renderKit();
+}
+
+// ---- what the filters leave ----
+
+function visibleKit() {
+  const needle = kitSearch.trim().toLowerCase();
+
+  return kit.filter((item) => {
+    if (kitCat !== 'any' && item.category !== kitCat) return false;
+    if (kitOwner !== 'any' && item.owner_tag !== kitOwner) return false;
+    if (!needle) return true;
+
+    return [item.name, item.serial, item.notes]
+      .filter(Boolean)
+      .some((field) => String(field).toLowerCase().includes(needle));
+  });
+}
+
+// ---- the chips ----
+
+function buildKitChips() {
+  const owners = [['any', 'Anyone']].concat(CREW.map((c) => [c.tag, c.name]));
+
+  el('kitownerchips').innerHTML = owners.map(([value, text]) => {
+    const entry = crewEntry(value);
+    const swatch = entry
+      ? `<span class="swatch" style="background:var(${entry.accent})"></span>` : '';
+    return `
+    <button type="button" class="chip${value === kitOwner ? ' on' : ''}"
+            data-kit-owner="${escapeAttr(value)}">${swatch}${escapeText(text)}</button>`;
+  }).join('');
+
+  const cats = [['any', 'Everything']]
+    .concat(KIT_CATEGORIES.map((c) => [c.value, c.word]));
+
+  el('kitcatchips').innerHTML = cats.map(([value, text]) => `
+    <button type="button" class="chip${value === kitCat ? ' on' : ''}"
+            data-kit-cat="${escapeAttr(value)}">${escapeText(text)}</button>`).join('');
+}
+
+el('kitownerchips').addEventListener('click', (event) => {
+  const chip = event.target.closest('button[data-kit-owner]');
+  if (!chip || chip.dataset.kitOwner === kitOwner) return;
+  kitOwner = chip.dataset.kitOwner;
+  renderKit();
+});
+
+el('kitcatchips').addEventListener('click', (event) => {
+  const chip = event.target.closest('button[data-kit-cat]');
+  if (!chip || chip.dataset.kitCat === kitCat) return;
+  kitCat = chip.dataset.kitCat;
+  renderKit();
+});
+
+let kitSearchTimer = null;
+el('kq').addEventListener('input', (event) => {
+  kitSearch = event.target.value;
+  clearTimeout(kitSearchTimer);
+  kitSearchTimer = setTimeout(renderKit, 140);
+});
+
+// ---- the three figures at the top ----
+
+function updateKitTally(rows) {
+  const pieces = kit.reduce((t, item) => t + kitQty(item), 0);
+  const worth  = kit.reduce((t, item) => t + kitLineValue(item), 0);
+
+  const shownWorth  = rows.reduce((t, item) => t + kitLineValue(item), 0);
+  const shownPieces = rows.reduce((t, item) => t + kitQty(item), 0);
+
+  // Kit with no value on it isn't worth nothing, it's worth unknown, and
+  // a total that quietly counts it as nought is a total that lies.
+  const unpriced = kit.filter((item) => item.value == null).length;
+
+  el('k_items').textContent = pieces;
+  el('k_items_sub').textContent = kit.length === pieces
+    ? (kit.length === 1 ? '1 line' : kit.length + ' lines')
+    : 'over ' + kit.length + ' lines';
+
+  el('k_value').textContent = money(worth);
+  el('k_value_sub').textContent = unpriced
+    ? unpriced + ' not valued yet'
+    : 'the lot';
+
+  el('k_shown').textContent = money(shownWorth);
+  el('k_shown_sub').textContent = shownPieces === pieces
+    ? 'everything'
+    : shownPieces + (shownPieces === 1 ? ' piece' : ' pieces');
+}
+
+// ---- the list ----
+
+function renderKit() {
+  buildKitChips();
+
+  const rows = visibleKit();
+  updateKitTally(rows);
+
+  const owner = kitOwner === 'any' ? '' : ((crewEntry(kitOwner) || {}).name || kitOwner) + '’s';
+  const what  = kitCat === 'any' ? 'Everything' : kitCategoryWord(kitCat);
+
+  el('kitlabel').textContent = [owner, kitCat === 'any' && owner ? 'kit' : what]
+    .filter(Boolean).join(' ');
+  el('kitcount').textContent = rows.length + (rows.length === 1 ? ' item' : ' items');
+
+  if (!rows.length) {
+    el('kitlist').innerHTML = kit.length
+      ? '<div class="empty">Nothing matches that.</div>'
+      : '<div class="empty">Nothing on the list yet. Add the first thing above.</div>';
+    return;
+  }
+
+  // Grouped in the order KIT_CATEGORIES is written, then anything saved
+  // under a heading that's since been deleted, on the end.
+  const known = KIT_CATEGORIES.map((c) => c.value);
+  const extra = [];
+  rows.forEach((item) => {
+    const key = item.category || 'other';
+    if (!known.includes(key) && !extra.includes(key)) extra.push(key);
+  });
+
+  el('kitlist').innerHTML = known.concat(extra).map((key) => {
+    const group = rows.filter((item) => (item.category || 'other') === key);
+    if (!group.length) return '';
+
+    const worth  = group.reduce((t, item) => t + kitLineValue(item), 0);
+    const pieces = group.reduce((t, item) => t + kitQty(item), 0);
+
+    // A heading that says £0 over three magic arms is a heading telling
+    // you they're worthless. They aren't priced yet, which is different.
+    const priced = group.some((item) => item.value != null);
+
+    const head = `
+      <div class="kithead">
+        <span class="kh">
+          <span class="swatch" style="background:${kitCategoryColour(key)}"></span>
+          ${escapeText(kitCategoryWord(key))}
+        </span>
+        <span class="kt">${pieces} &middot; ${priced ? money(worth) : 'not valued'}</span>
+      </div>`;
+
+    return head + group.map(kitRowHTML).join('');
+  }).join('');
+}
+
+function kitRowHTML(item) {
+  const qty = kitQty(item);
+  const many = qty > 1;
+
+  const value = item.value == null
+    ? '<div class="kval none">&mdash;</div>'
+    : `<div class="kval">${money(kitLineValue(item))}${
+        many ? `<span class="each">${money(item.value)} each</span>` : ''}</div>`;
+
+  return `
+    <div class="shootwrap kititem" style="border-left-color:${crewColour(item.owner_tag)}">
+      <div class="kit" data-kit-id="${escapeAttr(item.id)}">
+        <div class="mid">
+          <div class="kname">${escapeText(item.name)}${
+            many ? ` <span class="qty">&times;${qty}</span>` : ''}</div>
+          ${item.notes ? `<div class="knote">${escapeText(item.notes)}</div>` : ''}
+          ${item.serial ? `<div class="kser">${escapeText(item.serial)}</div>` : ''}
+        </div>
+        <div class="end">
+          ${value}
+          ${crewTag(item.owner_tag)}
+        </div>
+      </div>
+    </div>`;
+}
+
+// Tapping a line opens it for editing. Same as the money sheet — a row
+// menu with one thing on it is a menu that shouldn't exist.
+el('kitlist').addEventListener('click', (event) => {
+  const row = event.target.closest('.kit[data-kit-id]');
+  if (!row) return;
+
+  const item = kit.find((k) => String(k.id) === String(row.dataset.kitId));
+  if (item) startEditKit(item);
+});
+
+// ---- adding and editing ----
+
+let editingKit = null;
+
+function fillKitSelects() {
+  el('f_k_cat').innerHTML = KIT_CATEGORIES.map((c) => `
+    <option value="${escapeAttr(c.value)}">${escapeText(c.word + ' — ' + c.hint)}</option>`).join('');
+
+  el('f_k_owner').innerHTML = CREW.map((c) => `
+    <option value="${escapeAttr(c.tag)}">${escapeText(c.tag + ' — ' + c.name)}</option>`).join('');
+}
+
+fillKitSelects();
+
+function openKitForm() {
+  editingKit = null;
+  hide('kiterror');
+  hide('flash');
+
+  el('newkit').reset();
+  el('f_k_qty').value = 1;
+
+  // Whoever's signed in is the likeliest owner of the thing they're
+  // typing in. It's a default, not a rule — the dropdown still offers all three.
+  if (myTag) setSelect('f_k_owner', myTag);
+
+  el('kittitle').textContent = 'Add a bit of kit';
+  el('savekit').textContent = 'Save kit';
+  hide('deletekit');
+  show('newkit');
+  el('f_k_name').focus();
+}
+
+function startEditKit(item) {
+  editingKit = item;
+  hide('kiterror');
+  hide('flash');
+
+  el('newkit').reset();
+  el('f_k_name').value   = item.name || '';
+  el('f_k_value').value  = item.value == null ? '' : item.value;
+  el('f_k_qty').value    = kitQty(item);
+  el('f_k_serial').value = item.serial || '';
+  el('f_k_notes').value  = item.notes || '';
+  setSelect('f_k_cat', item.category);
+  setSelect('f_k_owner', item.owner_tag);
+
+  el('kittitle').textContent = 'Edit kit';
+  el('savekit').textContent = 'Save changes';
+  el('deletekit').textContent = 'Delete this item';
+  el('deletekit').dataset.armed = '';
+  el('deletekit').classList.remove('armed');
+  show('deletekit');
+  show('newkit');
+  el('newkit').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function closeKitForm() {
+  editingKit = null;
+  hide('newkit');
+}
+
+el('openkit').addEventListener('click', openKitForm);
+el('cancelkit').addEventListener('click', closeKitForm);
+
+el('deletekit').addEventListener('click', async () => {
+  if (!editingKit) return;
+  const button = el('deletekit');
+
+  if (button.dataset.armed !== '1') {
+    button.dataset.armed = '1';
+    button.classList.add('armed');
+    button.textContent = 'Tap again to delete';
+    setTimeout(() => {
+      button.dataset.armed = '';
+      button.classList.remove('armed');
+      button.textContent = 'Delete this item';
+    }, 5000);
+    return;
+  }
+
+  button.textContent = 'Deleting…';
+  const { data, error } = await supabase
+    .from('kit').delete().eq('id', editingKit.id).select('id');
+
+  if (error || !data || !data.length) {
+    button.dataset.armed = '';
+    button.classList.remove('armed');
+    button.textContent = 'Delete this item';
+    el('kiterror').textContent = error ? error.message : 'The database refused that.';
+    show('kiterror');
+    return;
+  }
+
+  closeKitForm();
+  flash('That’s off the list.');
+  loadKit();
+});
+
+el('newkit').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  hide('kiterror');
+
+  const name = el('f_k_name').value.trim();
+
+  if (!name) {
+    el('kiterror').textContent = 'It needs a name before it can be saved.';
+    show('kiterror');
+    return;
+  }
+
+  const value = el('f_k_value').value.trim();
+  const qty   = el('f_k_qty').value.trim();
+
+  const row = {
+    name:      name,
+    category:  el('f_k_cat').value,
+    owner_tag: el('f_k_owner').value,
+    value:     value === '' ? null : Number(value),
+    qty:       qty === '' ? 1 : Math.max(1, Math.round(Number(qty))),
+    serial:    el('f_k_serial').value.trim() || null,
+    notes:     el('f_k_notes').value.trim() || null
+  };
+
+  el('savekit').disabled = true;
+  el('savekit').textContent = 'Saving…';
+
+  let problem = null;
+
+  if (editingKit) {
+    const { data, error } = await supabase
+      .from('kit').update(row).eq('id', editingKit.id).select('id');
+
+    // A refusal comes back with no error and no rows. Asking for the rows
+    // back is the only way to tell the difference.
+    if (error) problem = error.message;
+    else if (!data || !data.length) problem = 'Nothing changed — the database refused it.';
+  } else {
+    if (teamId) row.team_id = teamId;
+    const { data, error } = await supabase.from('kit').insert(row).select('id');
+    if (error) problem = error.message;
+    else if (!data || !data.length) problem = 'The database refused that.';
+  }
+
+  el('savekit').disabled = false;
+  el('savekit').textContent = editingKit ? 'Save changes' : 'Save kit';
+
+  if (problem) {
+    el('kiterror').textContent = problem;
+    show('kiterror');
+    return;
+  }
+
+  const wasEdit = !!editingKit;
+  closeKitForm();
+  flash(wasEdit ? 'Kit updated.' : 'Added to the kit list.');
+  loadKit();
+});
+
+// ---- out to a spreadsheet ----
+//
+// What an insurer asks for: what it is, whose it is, how many, what one
+// costs and what the line comes to. Whatever the chips are set to is
+// what comes out, so you can send them one person's half of it.
+
+el('downloadkitcsv').addEventListener('click', () => {
+  const rows = visibleKit();
+  if (!rows.length) { flash('Nothing to export in that view.'); return; }
+
+  const head = ['CATEGORY', 'ITEM', 'OWNER', 'QTY', 'VALUE EACH', 'LINE VALUE', 'SERIAL', 'NOTES'];
+
+  const known = KIT_CATEGORIES.map((c) => c.value);
+  const order = (item) => {
+    const i = known.indexOf(item.category);
+    return i === -1 ? known.length : i;
+  };
+
+  const body = rows
+    .slice()
+    .sort((a, b) => order(a) - order(b) || String(a.name).localeCompare(String(b.name)))
+    .map((item) => [
+      kitCategoryWord(item.category),
+      item.name,
+      (crewEntry(item.owner_tag) || {}).name || item.owner_tag || '',
+      kitQty(item),
+      item.value == null ? '' : Number(item.value).toFixed(2),
+      item.value == null ? '' : kitLineValue(item).toFixed(2),
+      item.serial || '',
+      item.notes || ''
+    ]);
+
+  const total = rows.reduce((t, item) => t + kitLineValue(item), 0);
+
+  body.push([]);
+  body.push(['', '', '', rows.reduce((t, item) => t + kitQty(item), 0), '', total.toFixed(2), 'TOTAL', '']);
+
+  // The BOM is what stops Excel mangling the pound signs.
+  const csv = '\ufeff' + [head].concat(body)
+    .map((cols) => cols.map(csvCell).join(',')).join('\r\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.download = safeFilename('BGL Media kit list ' + todayISO()) + '.csv';
   link.click();
 
   URL.revokeObjectURL(url);

@@ -316,6 +316,7 @@
 
       <div class="chips" id="basischips"></div>
       <div class="milesnote" id="m_miles"></div>
+      <div id="doublecheck" class="error hidden"></div>
 
       <div class="pair">
         <div><button type="button" id="addin">Money in</button></div>
@@ -375,13 +376,11 @@
 
         <button type="submit" id="saveentry">Save entry</button>
         <div style="height:8px"></div>
-        <button type="button" class="quiet" id="cancelentry">Cancel</button>
-        <div style="height:8px"></div>
         <button type="button" class="quiet danger hidden" id="deleteentry">Delete this entry</button>
+        <div style="height:8px"></div>
+        <button type="button" class="quiet" id="cancelentry">Cancel</button>
         <div style="height:10px"></div>
       </form>
-
-      <div id="doublecheck" class="error hidden"></div>
 
       <div id="suggestwrap" class="hidden">
         <div class="label gap">Costs waiting to be logged</div>
@@ -402,6 +401,101 @@
 
     </section>
 
+    <!-- ============ KIT ============ -->
+    <!-- One list, shared. Who owns each piece is a tag on the item, not a
+         separate list each — so a bag packed out of both our cupboards is
+         still one list, and the insurance figures still split cleanly.
+
+         Hidden from anyone whose profile role isn't on the list in app.js.
+         Hiding it is only tidiness — kit.sql is what actually refuses. -->
+    <section id="screen-kit" class="screen hidden">
+
+      <div class="tally">
+        <div>
+          <div class="label">Pieces</div>
+          <div class="fig" id="k_items">&mdash;</div>
+          <div class="sub" id="k_items_sub"></div>
+        </div>
+        <div>
+          <div class="label">To replace</div>
+          <div class="fig" id="k_value">&mdash;</div>
+          <div class="sub" id="k_value_sub"></div>
+        </div>
+        <div>
+          <div class="label">Showing</div>
+          <div class="fig" id="k_shown">&mdash;</div>
+          <div class="sub" id="k_shown_sub"></div>
+        </div>
+      </div>
+
+      <button id="openkit">Add a bit of kit</button>
+
+      <form id="newkit" class="hidden">
+        <div class="formtitle" id="kittitle">Add a bit of kit</div>
+        <div id="kiterror" class="error hidden"></div>
+
+        <div class="label">What is it</div>
+        <input type="text" id="f_k_name" autocomplete="off" required
+               placeholder="Sony FX3">
+
+        <div class="pair">
+          <div>
+            <div class="label">Where it lives</div>
+            <select id="f_k_cat"></select>
+          </div>
+          <div>
+            <div class="label">Whose</div>
+            <select id="f_k_owner"></select>
+          </div>
+        </div>
+
+        <div class="pair">
+          <div>
+            <div class="label">Value &pound;</div>
+            <input type="number" id="f_k_value" min="0" step="1" inputmode="decimal"
+                   placeholder="Each, to replace">
+          </div>
+          <div>
+            <div class="label">How many</div>
+            <input type="number" id="f_k_qty" min="1" max="999" step="1"
+                   inputmode="numeric" value="1">
+          </div>
+        </div>
+
+        <div class="label">Serial no.</div>
+        <input type="text" id="f_k_serial" autocomplete="off"
+               placeholder="Leave empty if you haven't got it to hand">
+
+        <div class="label">Notes</div>
+        <input type="text" id="f_k_notes" autocomplete="off"
+               placeholder="Mount, condition, which bag it lives in">
+
+        <button type="submit" id="savekit">Save kit</button>
+        <div style="height:8px"></div>
+        <button type="button" class="quiet danger hidden" id="deletekit">Delete this item</button>
+        <div style="height:8px"></div>
+        <button type="button" class="quiet" id="cancelkit">Cancel</button>
+        <div style="height:10px"></div>
+      </form>
+
+      <div class="filters">
+        <input type="search" id="kq" placeholder="Search kit, serial or notes" autocomplete="off">
+        <div class="chips" id="kitownerchips"></div>
+        <div class="chips" id="kitcatchips"></div>
+      </div>
+
+      <div class="listhead">
+        <span class="label" id="kitlabel" style="margin:0">Everything</span>
+        <span class="count" id="kitcount"></span>
+      </div>
+
+      <div id="kitlist"></div>
+
+      <div class="spacer"></div>
+      <button type="button" class="quiet" id="downloadkitcsv">Download the list for the insurer</button>
+
+    </section>
+
     <!-- ============ ACCOUNT ============ -->
     <section id="screen-more" class="screen hidden">
 
@@ -414,7 +508,7 @@
       <div class="spacer"></div>
 
       <div class="label">Later</div>
-      <p style="color:var(--ink2)">Kit lists and client contacts will live behind the More menu. Nothing is listed until it's built &mdash; a menu of things that don't work is worse than a short menu.</p>
+      <p style="color:var(--ink2)">Client contacts will live behind the More menu next to Kit. Nothing is listed until it's built &mdash; a menu of things that don't work is worse than a short menu.</p>
 
     </section>
 
@@ -438,6 +532,11 @@
       <button type="button" class="mi hidden" id="mi_money" data-go="money">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h16v11H4z"/><circle cx="12" cy="13" r="2.4"/><path d="M7.5 13h.01M16.5 13h.01"/></svg>
         <span>Money</span>
+      </button>
+
+      <button type="button" class="mi hidden" id="mi_kit" data-go="kit">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8.5h4L8.5 6h7L17 8.5h4v11H3z"/><circle cx="12" cy="13.5" r="3.4"/></svg>
+        <span>Kit</span>
       </button>
 
       <button type="button" class="mi" data-go="more">

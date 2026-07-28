@@ -615,6 +615,53 @@ table.sheet tr.stedit .error { margin: 10px 0 0; }
 .late { color: var(--stamp); }
 
 /* ============================================================
+   Kit
+   ============================================================
+
+   The list is grouped, and each group carries its own colour down the
+   left edge — the same trick the schedule uses for who's on a job, so
+   the eye learns one thing and not two. The colour on a kit row is
+   whose it is; the colour on the group heading is what sort of thing
+   it is. */
+
+#newkit { border: 1px solid var(--ink); padding: 16px 16px 6px; margin-bottom: 20px; }
+#openkit { margin-bottom: 20px; }
+#screen-kit .filters { margin-top: 20px; }
+
+.kithead {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 10px; padding: 18px 0 5px; border-bottom: 1px solid var(--rule);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink);
+}
+.kithead .kh { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.kithead .swatch { width: 8px; height: 8px; flex: 0 0 8px; display: block; }
+.kithead .kt { color: var(--ink3); white-space: nowrap; }
+
+.kit {
+  display: flex; gap: 12px; align-items: center;
+  padding: 12px 12px 12px 12px; cursor: pointer;
+}
+.shootwrap.kititem:hover { background: var(--paper); }
+.kit .mid { flex: 1; min-width: 0; }
+.kit .kname { font-size: 15px; font-weight: 600; line-height: 1.25; }
+.kit .kname .qty {
+  font-family: var(--mono); font-weight: 400; font-size: 12px; color: var(--ink2);
+}
+.kit .knote { font-size: 13px; color: var(--ink2); margin-top: 2px; }
+.kit .kser {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink3); margin-top: 4px;
+}
+.kit .end {
+  display: flex; align-items: center; gap: 9px;
+  text-align: right; white-space: nowrap;
+}
+.kit .kval { font-family: var(--mono); font-size: 16px; }
+.kit .kval .each { display: block; font-size: 10px; color: var(--ink3); }
+.kit .kval.none { color: var(--ink3); }
+
+/* ============================================================
    Width
    ============================================================
 
