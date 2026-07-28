@@ -56,7 +56,7 @@ const ME = {
   company: 'BGL Media',
   address: '4, Bodmin Ave, Southport, PR9 9TU',
   phone:   '+44 7585 430643',
-  email:   'ben@bglmedia.co.uk',
+  email:   'benlaw@bglmedia.uk',
 
   // Invoice numbers are this, then three digits: BGLM001, BGLM002...
   prefix:  'BGLM',
@@ -232,14 +232,71 @@ function feeInfo(shoot) {
   };
 }
 
-// The big number, plus the smaller one underneath when a job is split.
+// ============================================================
+// Travel days
+//
+// A long job can need the day before it, the day after it, or both — the
+// drive out and the drive back. Those days aren't shoots of their own.
+// They're two numbers held on the shoot, which means they move when the
+// date moves and vanish when the job is deleted. There is no second row
+// anywhere that can be left behind pointing at nothing.
+//
+// How many, and which side, is set per shoot. Some jobs need none.
+// ============================================================
+
+function travelBefore(shoot) { return Math.max(0, Number(shoot.travel_before || 0)); }
+function travelAfter(shoot)  { return Math.max(0, Number(shoot.travel_after  || 0)); }
+function travelCount(shoot)  { return travelBefore(shoot) + travelAfter(shoot); }
+
+// The dates actually blocked out, earliest first.
+// side: 'out' is the run there, 'back' is the run home.
+function travelDates(shoot) {
+  const out = [];
+  if (!shoot.shoot_date) return out;
+  for (let i = travelBefore(shoot); i >= 1; i--) {
+    out.push({ iso: addDays(shoot.shoot_date, -i), side: 'out' });
+  }
+  for (let i = 1; i <= travelAfter(shoot); i++) {
+    out.push({ iso: addDays(shoot.shoot_date, i), side: 'back' });
+  }
+  return out;
+}
+
+// What the travel is worth in total. travel_each false means the number
+// typed is the whole job rather than one day of it. No travel days means
+// no travel money, whatever's in the box.
+function travelMoney(shoot) {
+  const days = travelCount(shoot);
+  if (!days || shoot.travel_fee == null || shoot.travel_fee === '') return null;
+  const fee = Number(shoot.travel_fee);
+  if (!isFinite(fee) || fee === 0) return null;
+  return shoot.travel_each === false ? fee : fee * days;
+}
+
+// '1 day before, 2 days after'
+function travelWords(shoot) {
+  const before = travelBefore(shoot);
+  const after  = travelAfter(shoot);
+  const bits = [];
+  if (before) bits.push(before + (before === 1 ? ' day before' : ' days before'));
+  if (after)  bits.push(after  + (after  === 1 ? ' day after'  : ' days after'));
+  return bits.join(', ');
+}
+
+// The big number, plus the smaller ones underneath when a job is split
+// or carries travel.
 function feeHTML(shoot) {
   const info = feeInfo(shoot);
-  if (info.headline == null) return '<div class="fee">&mdash;</div>';
+  const travel = travelMoney(shoot);
 
-  let html = `<div class="fee">${money(info.headline)}</div>`;
+  if (info.headline == null && travel == null) return '<div class="fee">&mdash;</div>';
+
+  let html = `<div class="fee">${info.headline == null ? '&mdash;' : money(info.headline)}</div>`;
   if (info.split) {
     html += `<div class="feesub">${money(info.schedule)} ${isOwner ? 'to crew' : 'yours'}</div>`;
+  }
+  if (travel != null) {
+    html += `<div class="feesub">+ ${money(travel)} travel</div>`;
   }
   return html;
 }
@@ -433,7 +490,8 @@ let statusFilter = 'any';
 let crewFilter = 'any';
 let search = '';
 
-const COLUMNS = 'id, shoot_date, call_time, venue, client, fee, job_type, status, crew';
+const COLUMNS = 'id, shoot_date, call_time, venue, client, fee, job_type, status, crew, '
+              + 'travel_before, travel_after, travel_fee, travel_each';
 
 // The fees have to land before anything draws, or the first paint shows
 // the schedule fee where the client fee belongs and then corrects itself.
@@ -515,13 +573,16 @@ function renderHome() {
     const when = gap === 0 ? 'Today' : gap === 1 ? 'Tomorrow' : 'In ' + gap + ' days';
     const nextFee = feeInfo(next).headline;
     const meta = [next.client, nextFee == null ? null : money(nextFee)].filter(Boolean);
+    const travel = travelCount(next)
+      ? ` &middot; travel ${escapeText(travelWords(next))}`
+      : '';
 
     el('nextup').innerHTML = `
       <div class="nextup" style="border-left-color:${crewColour(next.crew)}">
         <div class="bigdate">${longDate(next.shoot_date)}${next.call_time ? ' &middot; ' + escapeText(shortTime(next.call_time)) : ''} ${crewTag(next.crew)}</div>
         <div class="bigvenue">${escapeText(next.venue)}</div>
         <div class="bigmeta">${escapeText(meta.join(' · ')) || '&mdash;'}</div>
-        <div class="in">${when} &middot; ${escapeText(next.job_type)} &middot; ${escapeText(next.status)}</div>
+        <div class="in">${when} &middot; ${escapeText(next.job_type)} &middot; ${escapeText(next.status)}${travel}</div>
       </div>`;
   }
 
@@ -534,23 +595,29 @@ function updateTally(upcoming) {
   const monthName = new Date().toLocaleDateString('en-GB', { month: 'long' });
   const thisMonth = upcoming.filter((s) => String(s.shoot_date).startsWith(monthPrefix)).length;
 
+  // Travel money counts as booked money. It's on the invoice, so it's
+  // owed, and leaving it out would make the figure quietly wrong.
   let confirmed = 0;
   let provisional = 0;
   upcoming.forEach((s) => {
-    const fee = Number(feeInfo(s).headline || 0);
+    const fee = Number(feeInfo(s).headline || 0) + Number(travelMoney(s) || 0);
     if (PROVISIONAL.includes(s.status)) provisional += fee;
     else confirmed += fee;
   });
 
+  const travelAhead = upcoming.reduce((sum, s) => sum + travelCount(s), 0);
+
   el('t_ahead').textContent = upcoming.length;
-  el('t_ahead_sub').textContent = thisMonth + ' in ' + monthName;
+  el('t_ahead_sub').textContent = thisMonth + ' in ' + monthName
+    + (travelAhead ? ' · +' + travelAhead + ' travel' : '');
   el('t_booked').textContent = money(confirmed);
   el('t_booked_sub').textContent = provisional ? money(provisional) + ' pencilled' : 'all confirmed';
 
   // Owed looks at every shoot, not just the ones ahead — most of what's
   // outstanding is work that's already happened.
   const owedRows = allShoots.filter((s) => OWED_STATUSES.includes(s.status));
-  const owed = owedRows.reduce((sum, row) => sum + Number(feeInfo(row).headline || 0), 0);
+  const owed = owedRows.reduce(
+    (sum, row) => sum + Number(feeInfo(row).headline || 0) + Number(travelMoney(row) || 0), 0);
   el('t_owed').textContent = money(owed);
   el('t_owed_sub').textContent = owedRows.length + (owedRows.length === 1 ? ' job' : ' jobs');
 }
@@ -586,6 +653,9 @@ const calMonth = new Date();
 calMonth.setDate(1);
 let selectedDay = null;
 
+// date -> [{ shoot, side }]. Rebuilt on every calendar draw.
+let travelByDate = {};
+
 function renderCalendar() {
   el('monthname').textContent = calMonth
     .toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
@@ -597,6 +667,16 @@ function renderCalendar() {
   const byDate = {};
   allShoots.forEach((s) => {
     (byDate[s.shoot_date] = byDate[s.shoot_date] || []).push(s);
+  });
+
+  // And the same again for the days either side that travel blocks out.
+  // Built fresh every draw from the shoots themselves, so it can't fall
+  // out of step with them.
+  travelByDate = {};
+  allShoots.forEach((s) => {
+    travelDates(s).forEach((t) => {
+      (travelByDate[t.iso] = travelByDate[t.iso] || []).push({ shoot: s, side: t.side });
+    });
   });
 
   // Six rows of seven, starting on the Monday on or before the 1st.
@@ -612,14 +692,21 @@ function renderCalendar() {
     const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
     const iso = isoOf(d);
     const list = byDate[iso] || [];
+    const held = travelByDate[iso] || [];
 
     const classes = ['day'];
     if (d.getMonth() !== calMonth.getMonth()) classes.push('out');
     if (iso === today) classes.push('today');
     if (iso === selectedDay) classes.push('on');
+    // A day that's only held for travel is shaded, so a full week reads
+    // as full at a glance rather than looking half free.
+    if (held.length && !list.length) classes.push('held');
 
+    // Solid pip for a shoot, hollow for a day held open to travel.
     const pips = list.slice(0, 3)
-      .map((s) => `<i style="background:${crewColour(s.crew)}"></i>`).join('');
+      .map((s) => `<i style="background:${crewColour(s.crew)}"></i>`).join('')
+      + held.slice(0, 3 - Math.min(3, list.length))
+        .map((t) => `<i class="tr" style="box-shadow:inset 0 0 0 1.5px ${crewColour(t.shoot.crew)}"></i>`).join('');
 
     cells += `<button type="button" class="${classes.join(' ')}" data-date="${iso}">
         <span>${d.getDate()}</span><span class="pips">${pips}</span>
@@ -630,7 +717,7 @@ function renderCalendar() {
 
   el('callegend').innerHTML = CREW
     .map((c) => `<div><span style="background:var(${c.accent})"></span>${escapeText(c.tag)} &mdash; ${escapeText(c.name)}</div>`)
-    .join('');
+    .join('') + '<div><span class="hollow"></span>Travel day</div>';
 
   renderDay();
 }
@@ -642,14 +729,15 @@ function renderDay() {
   }
 
   const rows = allShoots.filter((s) => s.shoot_date === selectedDay).sort(byDateAscending);
+  const held = travelByDate[selectedDay] || [];
   const heading = `<div class="label gap">${longDate(selectedDay)}</div>`;
 
-  if (!rows.length) {
+  if (!rows.length && !held.length) {
     el('dayview').innerHTML = heading + '<div class="empty">Nothing that day.</div>';
     return;
   }
 
-  el('dayview').innerHTML = heading + rows.map((s) => `
+  const shootRows = rows.map((s) => `
     <div class="mini" style="border-left-color:${crewColour(s.crew)}">
       <div>
         <div class="mv">${escapeText(s.venue)} ${crewTag(s.crew)}</div>
@@ -657,6 +745,19 @@ function renderDay() {
       </div>
       <div class="mf">${money(feeInfo(s).headline)}</div>
     </div>`).join('');
+
+  // Travel days say which job is holding them and which way you're going,
+  // so a held day is never a mystery.
+  const heldRows = held.map((t) => `
+    <div class="mini travel" style="border-left-color:${crewColour(t.shoot.crew)}">
+      <div>
+        <div class="mv">Travel ${t.side === 'out' ? 'out' : 'back'} ${crewTag(t.shoot.crew)}</div>
+        <div class="mm">Held for ${escapeText(t.shoot.venue)} &middot; ${longDate(t.shoot.shoot_date)}</div>
+      </div>
+      <div class="tag">Blocked</div>
+    </div>`).join('');
+
+  el('dayview').innerHTML = heading + shootRows + heldRows;
 }
 
 el('calcells').addEventListener('click', (event) => {
@@ -723,6 +824,13 @@ function renderList() {
   el('list').innerHTML = rows.map(rowHTML).join('');
 }
 
+// A small dashed marker on a row that's holding days either side of it.
+function travelMark(shoot) {
+  const days = travelCount(shoot);
+  if (!days) return '';
+  return `<span class="travelmark" title="Travel: ${escapeAttr(travelWords(shoot))}">+${days} travel</span>`;
+}
+
 function rowHTML(shoot) {
   const colour = crewColour(shoot.crew);
 
@@ -740,7 +848,7 @@ function rowHTML(shoot) {
         <div class="mid">
           <div class="venue">${escapeText(shoot.venue)}</div>
           <div class="client">${escapeText(shoot.client || '—')}</div>
-          <div class="type">${escapeText(shoot.job_type)} ${crewTag(shoot.crew)}</div>
+          <div class="type">${escapeText(shoot.job_type)} ${crewTag(shoot.crew)}${travelMark(shoot)}</div>
         </div>
         <div class="end">
           ${feeHTML(shoot)}
@@ -980,6 +1088,13 @@ function openForm() {
   el('f_actual').value = '';
   el('f_shared').checked = false;
   el('f_date').value = todayISO();
+
+  el('f_tbefore').value = 0;
+  el('f_tafter').value = 0;
+  el('f_tfee').value = '';
+  el('f_teach').value = 'each';
+  updateTravelSummary();
+
   el('formtitle').textContent = 'Add a shoot';
   el('save').textContent = 'Save shoot';
   show('newshoot');
@@ -1012,6 +1127,12 @@ function startEdit(id) {
   el('f_actual').value = info.actual == null ? '' : info.actual;
   el('f_shared').checked = info.shared;
 
+  el('f_tbefore').value = travelBefore(shoot);
+  el('f_tafter').value  = travelAfter(shoot);
+  el('f_tfee').value    = shoot.travel_fee == null ? '' : shoot.travel_fee;
+  el('f_teach').value   = shoot.travel_each === false ? 'total' : 'each';
+  updateTravelSummary();
+
   el('formtitle').textContent = 'Edit shoot';
   el('save').textContent = 'Save changes';
   show('newshoot');
@@ -1024,6 +1145,65 @@ function closeForm() {
   hide('newshoot');
   show('openform');
 }
+
+// The line under the travel boxes. It names the exact dates being held and
+// says plainly if one of them already has a job on it — which is the whole
+// reason for blocking them out in the first place.
+function updateTravelSummary() {
+  const date   = el('f_date').value;
+  const before = Math.max(0, Math.min(14, Number(el('f_tbefore').value || 0)));
+  const after  = Math.max(0, Math.min(14, Number(el('f_tafter').value  || 0)));
+  const days   = before + after;
+  const box    = el('travelsum');
+
+  el('travelfee').classList.toggle('hidden', days === 0);
+
+  if (!days) {
+    box.innerHTML = 'No travel days. The calendar stays free either side.';
+    return;
+  }
+  if (!date) {
+    box.innerHTML = days + (days === 1 ? ' day held' : ' days held')
+      + ' &mdash; set a date to see which.';
+    return;
+  }
+
+  const draft = {
+    shoot_date:    date,
+    travel_before: before,
+    travel_after:  after,
+    travel_fee:    el('f_tfee').value.trim() === '' ? null : Number(el('f_tfee').value),
+    travel_each:   el('f_teach').value !== 'total'
+  };
+
+  const dates = travelDates(draft);
+  const worth = travelMoney(draft);
+
+  const parts = [
+    days + (days === 1 ? ' day held' : ' days held'),
+    dates.map((t) => longDate(t.iso)).join(', ')
+  ];
+  if (worth != null) parts.push(money(worth) + ' travel');
+
+  // Anything already booked on a day we're about to hold. The shoot being
+  // edited doesn't count as a clash with itself.
+  const clashes = dates
+    .map((t) => ({
+      iso: t.iso,
+      hits: allShoots.filter((s) => s.shoot_date === t.iso
+        && String(s.id) !== String(editingId))
+    }))
+    .filter((c) => c.hits.length);
+
+  box.innerHTML = escapeText(parts.join(' · '))
+    + clashes.map((c) => `<span class="clash">${longDate(c.iso)} already has `
+        + `${escapeText(c.hits.map((s) => s.venue).join(', '))} on it.</span>`).join('');
+}
+
+['f_tbefore', 'f_tafter', 'f_tfee', 'f_teach', 'f_date'].forEach((id) => {
+  el(id).addEventListener('input', updateTravelSummary);
+  el(id).addEventListener('change', updateTravelSummary);
+});
 
 el('openform').addEventListener('click', openForm);
 el('cancel').addEventListener('click', closeForm);
@@ -1042,6 +1222,13 @@ el('newshoot').addEventListener('submit', async (event) => {
     return;
   }
 
+  // No travel days means no travel money, whatever's still sitting in the
+  // box. Saving a fee against zero days would leave a figure that shows up
+  // nowhere and can't be found again.
+  const tBefore = Math.max(0, Math.min(14, Number(el('f_tbefore').value || 0)));
+  const tAfter  = Math.max(0, Math.min(14, Number(el('f_tafter').value  || 0)));
+  const tFee    = el('f_tfee').value.trim();
+
   const row = {
     shoot_date: date,
     call_time:  el('f_time').value || null,
@@ -1050,7 +1237,12 @@ el('newshoot').addEventListener('submit', async (event) => {
     fee:        fee === '' ? null : Number(fee),
     job_type:   el('f_type').value,
     status:     el('f_status').value,
-    crew:       el('f_crew').value || null
+    crew:       el('f_crew').value || null,
+
+    travel_before: tBefore,
+    travel_after:  tAfter,
+    travel_fee:    (tBefore + tAfter) === 0 || tFee === '' ? null : Number(tFee),
+    travel_each:   el('f_teach').value !== 'total'
   };
 
   const saving = editingId;
@@ -1465,12 +1657,14 @@ function renderPicker() {
 
   el('pickshoots').innerHTML = rows.map((s) => {
     const fee = feeInfo(s).headline;
+    const travel = travelMoney(s);
     return `
       <label class="pickrow">
         <input type="checkbox" data-shoot="${escapeAttr(s.id)}"${attached.has(String(s.id)) ? ' checked' : ''}>
         <span>
           ${escapeText(s.venue)}
           <span class="pm">${longDate(s.shoot_date)} &middot; ${escapeText(s.job_type)} &middot; ${escapeText(s.status)}</span>
+          ${travel == null ? '' : `<span class="pm">+ ${escapeText(travelWords(s))} &middot; ${money(travel)}</span>`}
         </span>
         <span class="pf">${fee == null ? '—' : money(fee)}</span>
       </label>`;
@@ -1484,14 +1678,17 @@ el('pickshoots').addEventListener('change', (event) => {
   if (!box) return;
 
   const id = box.dataset.shoot;
-  const existing = document.querySelector(`#lines .lineitem[data-shoot="${CSS.escape(id)}"]`);
+
+  // A job can put two lines on an invoice — the shoot, and its travel.
+  // Both carry the same shoot id, so both come off together.
+  const existing = document.querySelectorAll(`#lines .lineitem[data-shoot="${CSS.escape(id)}"]`);
 
   if (!box.checked) {
-    if (existing) existing.remove();
+    existing.forEach((node) => node.remove());
     updateLineTotal();
     return;
   }
-  if (existing) return;
+  if (existing.length) return;
 
   const shoot = allShoots.find((s) => String(s.id) === String(id));
   if (!shoot) return;
@@ -1501,6 +1698,21 @@ el('pickshoots').addEventListener('change', (event) => {
     q: 1,
     u: feeInfo(shoot).headline == null ? '' : feeInfo(shoot).headline
   }, shoot.id);
+
+  // Travel is billed on its own line rather than folded into the fee, so
+  // the client can see what they're paying for. Per-day travel goes on as
+  // a quantity, which is what the QTY column is for.
+  const travel = travelMoney(shoot);
+  if (travel != null) {
+    const days = travelCount(shoot);
+    const perDay = shoot.travel_each !== false;
+
+    addLine({
+      d: `Travel — ${shoot.venue}, ${dotDate(shoot.shoot_date)}`,
+      q: perDay ? days : 1,
+      u: perDay ? Number(shoot.travel_fee) : travel
+    }, shoot.id);
+  }
 });
 
 el('f_i_client').addEventListener('input', () => {
@@ -1671,7 +1883,9 @@ el('newinvoice').addEventListener('submit', async (event) => {
 
   // Only the lines that survived keep their shoot links, so a line deleted
   // by hand doesn't leave a job stuck marked as billed.
-  const shootIds = lines.map((l) => l.s).filter(Boolean);
+  // One job can put two lines on an invoice — the shoot and its travel —
+  // so the same id can turn up twice. It only needs recording once.
+  const shootIds = Array.from(new Set(lines.map((l) => l.s).filter(Boolean)));
 
   const row = {
     seq:        seqFromNumber(number, editingInvoice ? editingInvoice.seq : nextSeq()),

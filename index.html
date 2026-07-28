@@ -110,6 +110,43 @@
           </label>
         </div>
 
+        <!-- Travel days. Nought either side by default, so a job that
+             doesn't need them is one fewer thing to think about. -->
+        <div id="travel">
+          <div class="label">Travel days</div>
+          <div class="pair">
+            <div>
+              <div class="linelabel">Days before</div>
+              <input type="number" id="f_tbefore" min="0" max="14" step="1"
+                     inputmode="numeric" value="0">
+            </div>
+            <div>
+              <div class="linelabel">Days after</div>
+              <input type="number" id="f_tafter" min="0" max="14" step="1"
+                     inputmode="numeric" value="0">
+            </div>
+          </div>
+
+          <div id="travelfee" class="hidden">
+            <div class="pair">
+              <div>
+                <div class="linelabel">Travel fee &pound;</div>
+                <input type="number" id="f_tfee" min="0" step="1" inputmode="decimal"
+                       placeholder="Leave empty if it's unpaid">
+              </div>
+              <div>
+                <div class="linelabel">Charged</div>
+                <select id="f_teach">
+                  <option value="each">Per travel day</option>
+                  <option value="total">One total</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="travelsum" id="travelsum">No travel days. The calendar stays free either side.</div>
+        </div>
+
         <div class="pair">
           <div>
             <div class="label">Status</div>

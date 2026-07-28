@@ -232,6 +232,31 @@ p { font-size: 14px; line-height: 1.6; margin: 0 0 12px; }
   text-transform: uppercase; color: var(--ink3); margin: 3px 0 7px;
 }
 
+/* ---- travel days ----
+   Same inset block as the client fee, but ruled rather than stamped: it's
+   a normal part of a job, not a permission. */
+#travel {
+  border-left: 3px solid var(--rule); background: var(--paper);
+  padding: 12px 12px 2px; margin-bottom: 14px;
+}
+.travelsum {
+  font-family: var(--mono); font-size: 11px; line-height: 1.5;
+  letter-spacing: 0.04em; color: var(--ink2); margin-bottom: 12px;
+}
+.travelsum .clash { display: block; color: var(--stamp); margin-top: 3px; }
+.travelmark {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink3);
+  border: 1px dashed var(--rule); padding: 1px 5px; margin-left: 4px;
+  white-space: nowrap;
+}
+/* A held day in the day view, and a held cell in the grid. */
+.mini.travel { background: var(--paper); border-left-style: dashed; }
+.mini.travel .mv { font-weight: 400; color: var(--ink2); }
+.day.held { background: color-mix(in srgb, var(--card) 55%, var(--paper)); }
+.pips i.tr { background: none; }
+.callegend span.hollow { box-shadow: inset 0 0 0 1.5px var(--ink3); }
+
 /* ---- who's on it ---- */
 .crewtag {
   font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em;
