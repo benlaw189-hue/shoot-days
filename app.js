@@ -47,6 +47,10 @@ const PROVISIONAL   = ['pencilled'];
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// A hatch to the database from the browser console, for testing the
+// security rules. Safe to leave in — every query still goes through them.
+window.sb = supabase;
+
 const el = (id) => document.getElementById(id);
 const show = (id) => el(id).classList.remove('hidden');
 const hide = (id) => el(id).classList.add('hidden');
