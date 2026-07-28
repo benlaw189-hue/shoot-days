@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BGL Media</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+
+</head>
+<body>
+<main>
+  <div class="label" id="todaylabel">Production schedule</div>
+  <h1>BGL<br>Media</h1>
+  <!-- Six bars, coloured by --accent-1..6 in styles.css. -->
+  <div class="rule">
+    <span></span><span></span><span></span><span></span><span></span><span></span>
+  </div>
+
+  <div id="loading"><p>Loading&hellip;</p></div>
+
+  <form id="login" class="hidden">
+    <div id="error" class="error hidden"></div>
+    <div class="label">Email</div>
+    <input type="email" id="email" autocomplete="username" required>
+    <div class="label">Password</div>
+    <input type="password" id="password" autocomplete="current-password" required>
+    <button type="submit" id="signin">Sign in</button>
+  </form>
+
+  <div id="app" class="hidden">
+
+    <div id="flash" class="flash hidden"></div>
+
+    <!-- ============ HOME ============ -->
+    <section id="screen-home" class="screen">
+
+      <div class="label">Next up</div>
+      <div id="nextup"></div>
+
+      <div class="tally">
+        <div>
+          <div class="label">Days ahead</div>
+          <div class="fig" id="t_ahead">&mdash;</div>
+          <div class="sub" id="t_ahead_sub"></div>
+        </div>
+        <div>
+          <div class="label">Booked in</div>
+          <div class="fig" id="t_booked">&mdash;</div>
+          <div class="sub" id="t_booked_sub"></div>
+        </div>
+        <div>
+          <div class="label">Owed</div>
+          <div class="fig" id="t_owed">&mdash;</div>
+          <div class="sub" id="t_owed_sub"></div>
+        </div>
+      </div>
+
+      <div class="label gap">Needs a nudge</div>
+      <div id="nudge"></div>
+
+    </section>
+
+    <!-- ============ SHOOTS ============ -->
+    <section id="screen-shoots" class="screen hidden">
+
+      <button id="openform">Add a shoot</button>
+
+      <form id="newshoot" class="hidden">
+        <div class="formtitle" id="formtitle">Add a shoot</div>
+        <div id="formerror" class="error hidden"></div>
+
+        <div class="pair">
+          <div>
+            <div class="label">Date</div>
+            <input type="date" id="f_date" required>
+          </div>
+          <div>
+            <div class="label">Call time</div>
+            <input type="time" id="f_time">
+          </div>
+        </div>
+
+        <div class="label">Venue</div>
+        <input type="text" id="f_venue" autocomplete="off" required>
+
+        <div class="label">Client</div>
+        <input type="text" id="f_client" autocomplete="off">
+
+        <div class="pair">
+          <div>
+            <div class="label" id="feelabel">Fee &pound;</div>
+            <input type="number" id="f_fee" min="0" step="1" inputmode="decimal">
+          </div>
+          <div>
+            <div class="label">Job type</div>
+            <select id="f_type"></select>
+          </div>
+        </div>
+
+        <div id="clientfee" class="hidden">
+          <div class="label">Client fee &pound;</div>
+          <input type="number" id="f_actual" min="0" step="1" inputmode="decimal"
+                 placeholder="Leave empty if there's no split">
+          <label class="switch">
+            <input type="checkbox" id="f_shared">
+            <span>Let the crew see the client fee on this job</span>
+          </label>
+        </div>
+
+        <div class="pair">
+          <div>
+            <div class="label">Status</div>
+            <select id="f_status"></select>
+          </div>
+          <div>
+            <div class="label">Who's on it</div>
+            <select id="f_crew"></select>
+          </div>
+        </div>
+
+        <button type="submit" id="save">Save shoot</button>
+        <div style="height:8px"></div>
+        <button type="button" class="quiet" id="cancel">Cancel</button>
+        <div style="height:10px"></div>
+      </form>
+
+      <div class="filters">
+        <input type="search" id="q" placeholder="Search venue or client" autocomplete="off">
+        <div class="chips" id="scopechips">
+          <button type="button" class="chip on" data-scope="upcoming">Coming up</button>
+          <button type="button" class="chip" data-scope="all">Everything</button>
+        </div>
+        <div class="chips" id="crewchips"></div>
+        <div class="chips" id="statuschips"></div>
+      </div>
+
+      <div class="listhead">
+        <span class="label" id="listlabel" style="margin:0">Coming up</span>
+        <span class="count" id="count"></span>
+      </div>
+
+      <div id="list"></div>
+
+    </section>
+
+    <!-- ============ CALENDAR ============ -->
+    <section id="screen-calendar" class="screen hidden">
+
+      <div class="calnav">
+        <button type="button" id="prevmonth" aria-label="Previous month">&#8249;</button>
+        <div class="m" id="monthname"></div>
+        <button type="button" id="nextmonth" aria-label="Next month">&#8250;</button>
+      </div>
+
+      <div class="calgrid" id="caldays"></div>
+      <div class="calgrid" id="calcells"></div>
+      <div class="callegend" id="callegend"></div>
+      <div id="dayview"></div>
+
+    </section>
+
+    <!-- ============ MORE ============ -->
+    <section id="screen-more" class="screen hidden">
+
+      <div class="label">Signed in as</div>
+      <div class="whoname" id="whoname"></div>
+      <div class="whotitle" id="whotitle"></div>
+      <div class="who" id="who"></div>
+      <button class="quiet" id="signout">Sign out</button>
+
+      <div class="spacer"></div>
+
+      <div class="label">Later</div>
+      <p style="color:var(--ink2)">Kit lists, clients and invoicing will live on this screen. Nothing is listed until it's built &mdash; a menu of things that don't work is worse than a short menu.</p>
+
+    </section>
+
+  </div>
+</main>
+
+<nav id="tabs" class="tabbar hidden">
+  <div class="tabinner">
+
+    <button type="button" class="tab on" data-tab="home">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      <span>Home</span>
+    </button>
+
+    <button type="button" class="tab" data-tab="shoots">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
+      <span>Shoots</span>
+    </button>
+
+    <button type="button" class="tab" data-tab="calendar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v15H4z"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>
+      <span>Calendar</span>
+    </button>
+
+    <button type="button" class="tab" data-tab="add">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      <span>Add</span>
+    </button>
+
+    <button type="button" class="tab" data-tab="more">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>
+      <span>More</span>
+    </button>
+
+  </div>
+</nav>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
