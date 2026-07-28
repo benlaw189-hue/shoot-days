@@ -706,6 +706,38 @@ table.sheet tr.stedit .error { margin: 10px 0 0; }
   white-space: pre-wrap;
 }
 
+/* The message is typed in place now rather than read. The subject sits
+   on the same line the old read-only one did, so the box doesn't jump
+   about when you start editing it. */
+.msgsubin {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+  padding: 0 0 9px 0; margin-bottom: 11px;
+  background: none; border: none; border-bottom: 1px solid var(--rule);
+  border-radius: 0; color: var(--ink);
+}
+.msgsubin:focus { outline: none; border-bottom-color: var(--ink); }
+
+.msgbodyin {
+  width: 100%; box-sizing: border-box; resize: vertical;
+  padding: 0; margin: 0;
+  font-family: inherit; font-size: 15px; line-height: 1.55;
+  background: none; color: var(--ink); border: none;
+}
+.msgbodyin:focus { outline: none; }
+
+/* Placeholders here are instructions, not sample text, so they want to
+   read as quieter than what you type over them. */
+.msgsubin::placeholder, .msgbodyin::placeholder { color: var(--ink3); }
+
+.msghint {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+  color: var(--ink3); line-height: 1.5;
+  margin-top: 11px; padding-top: 9px; border-top: 1px solid var(--rule);
+}
+
+#savemsgwrap { margin-bottom: 12px; }
+#savemsg { font-size: 13px; padding: 10px; }
+
 .orow { display: flex; gap: 12px; padding: 12px; align-items: flex-start; }
 .shootwrap.oitem:hover { background: var(--paper); }
 .orow .mid { flex: 1; min-width: 0; cursor: pointer; }
@@ -813,3 +845,8 @@ table.sheet tr.stedit .error { margin: 10px 0 0; }
      left would pin the lot. */
   table.sheet tr.stedit td { position: static; border-right: none; }
 }
+
+/* The website on an outreach row. It's a link inside a row that's
+   otherwise a button, so it needs to look like one. */
+.orow .osite { color: var(--ink2); text-decoration: underline; }
+.orow .osite:hover { color: var(--ink); }

@@ -525,11 +525,13 @@
 
       <div class="chasenote hidden" id="o_chase"></div>
 
-      <!-- The message itself. One per sort of business, kept in app.js so
-           there's one copy of each and not one per row. -->
+      <!-- The message itself. One per sort of business, typed here and
+           kept in the database, so there's one copy of each and not one
+           per row — and so it can be changed from a phone. -->
       <div class="label">The message</div>
       <div class="chips" id="msgchips"></div>
       <div class="msgbox" id="msgbox"></div>
+      <div id="savemsgwrap"><button type="button" id="savemsg">Save this message</button></div>
       <div class="pair">
         <div id="copywrap"><button type="button" class="quiet" id="copymsg">Copy the message</button></div>
         <div><button type="button" class="quiet" id="hidemsg">Put it away</button></div>
@@ -557,6 +559,9 @@
             <input type="text" id="f_o_area" autocomplete="off" placeholder="Southport">
           </div>
         </div>
+
+        <div class="label">Website</div>
+        <input type="text" id="f_o_site" autocomplete="off" placeholder="curlettjones.co.uk">
 
         <div class="label">Who you're writing to</div>
         <input type="text" id="f_o_contact" autocomplete="off"

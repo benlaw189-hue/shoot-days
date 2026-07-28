@@ -175,117 +175,29 @@ const OUTREACH_STATES = [
 const FOLLOW_UP_DAYS = 7;
 
 // ============================================================
-// EDIT THESE. What you actually send.
+// What you actually send.
 //
-// One message per sort of business. {business} and {hello} are filled
-// in from the row when you press Write — {hello} becomes 'Hi Sarah' if
-// you've got a name on the row and plain 'Hello' if you haven't, so a
-// row with no name still reads properly.
+// Nothing is written here any more. Each sort of business gets its own
+// message, typed on the Outreach screen and kept in the database, so it
+// can be changed on your phone at a bus stop rather than by editing
+// this file and pushing it.
 //
-// Don't sign these off. Your name, the company and your number are
-// added underneath from ME at the top of this file, so changing your
-// phone number changes it in seven messages at once rather than none.
+// Two gaps get filled in from the row when you press Send:
+//
+//   {business}  the name on the row
+//   {hello}     'Hi Sarah' if there's a name, plain 'Hello' if not
+//
+// Anything else you type comes out exactly as typed. Don't sign them
+// off — your name, the company and your number are added underneath
+// from ME below, so changing your phone number changes it in every
+// message at once rather than none.
+//
+// This holds whatever came back from the database. Empty until the
+// screen loads, and empty is handled: pressing Send on a kind you
+// haven't written a message for tells you so rather than sending a
+// blank email.
 // ============================================================
-const OUTREACH_MESSAGES = {
-  'estate agent': {
-    subject: 'Video walkthroughs for {business}',
-    body:
-      '{hello},\n\n' +
-      'I\'m a videographer based in Southport. I shoot property walkthroughs and '
-      + 'drone footage for agents around the North West — the sort of thing that '
-      + 'gets a listing watched rather than scrolled past.\n\n'
-      + 'Most agents I work with book a half day and come away with a walkthrough, '
-      + 'a short social cut and stills, all edited and back within a few days.\n\n'
-      + 'If you\'ve got a property coming up that\'s worth the effort, I\'d be glad '
-      + 'to show you what that looks like. Happy to send a couple of recent ones over.'
-  },
-
-  restaurant: {
-    subject: 'Food and room video for {business}',
-    body:
-      '{hello},\n\n'
-      + 'I\'m a videographer based in Southport. I film for restaurants and bars — '
-      + 'the food, the room when it\'s full, and the short vertical cuts that do the '
-      + 'work on Instagram and TikTok.\n\n'
-      + 'It\'s usually one quiet afternoon and one service, and it gives you enough '
-      + 'to post from for a couple of months rather than a single video.\n\n'
-      + 'If that\'s something you\'ve been meaning to sort out, I\'d be happy to send '
-      + 'over a few examples and what it would cost.'
-  },
-
-  shop: {
-    subject: 'Video for {business}',
-    body:
-      '{hello},\n\n'
-      + 'I\'m a videographer based in Southport, working with independent shops on '
-      + 'product and window video — short pieces for social, and something longer '
-      + 'for the website if it\'s wanted.\n\n'
-      + 'It tends to work best around something that\'s already happening: a new '
-      + 'range, a refit, the run-up to Christmas.\n\n'
-      + 'If you\'ve got something coming up, I\'d be glad to talk it through. I can '
-      + 'send a few examples over first if that\'s easier.'
-  },
-
-  bar: {
-    subject: 'Video for {business}',
-    body:
-      '{hello},\n\n'
-      + 'I\'m a videographer based in Southport. I film for bars and cafés — the '
-      + 'room on a good night, drinks close up, and short vertical cuts for social.\n\n'
-      + 'Usually it\'s one evening\'s filming, and it gives you enough to post from '
-      + 'for months rather than one video that\'s done by the weekend.\n\n'
-      + 'If you\'ve got an event or a new menu coming up, I\'d be happy to send some '
-      + 'examples and a price over.'
-  },
-
-  gym: {
-    subject: 'Video for {business}',
-    body:
-      '{hello},\n\n'
-      + 'I\'m a videographer based in Southport. I work with gyms and studios on '
-      + 'class footage, coach introductions and member stories — the pieces that '
-      + 'show somebody what walking in actually feels like.\n\n'
-      + 'It\'s usually a morning\'s filming around your normal timetable, so nothing '
-      + 'has to be staged or stopped.\n\n'
-      + 'If you\'re working on sign-ups for the new year or a new class, I\'d be glad '
-      + 'to send over some examples.'
-  },
-
-  trade: {
-    subject: 'Video for {business}',
-    body:
-      '{hello},\n\n'
-      + 'I\'m a videographer based in Southport. I film for trades and builders — '
-      + 'before-and-afters, site work and short pieces for social. Good work is '
-      + 'hard to sell in photographs and easy to sell in video.\n\n'
-      + 'It can be done in a couple of visits around a job you\'re already on, so it '
-      + 'doesn\'t cost you a day.\n\n'
-      + 'If you\'ve got a project worth showing off, I\'d be happy to talk it through.'
-  },
-
-  venue: {
-    subject: 'Video for {business}',
-    body:
-      '{hello},\n\n'
-      + 'I\'m a videographer based in Southport, working with venues on the films '
-      + 'that get enquiries in — the space dressed for a wedding, a corporate day '
-      + 'running, and short cuts for social and the website.\n\n'
-      + 'I also shoot on the day for couples and companies booking with you, which '
-      + 'some venues like to be able to recommend.\n\n'
-      + 'If it\'s worth a conversation, I\'d be glad to send examples and prices over.'
-  },
-
-  other: {
-    subject: 'Video for {business}',
-    body:
-      '{hello},\n\n'
-      + 'I\'m a videographer based in Southport. I work with businesses around the '
-      + 'North West on short video for social and websites — filmed, edited and '
-      + 'back with you inside a week.\n\n'
-      + 'If it\'s something you\'ve been meaning to get sorted, I\'d be happy to send '
-      + 'over a few examples and what it would cost.'
-  }
-};
+let OUTREACH_MESSAGES = {};
 
 // ============================================================
 // Who gets the Outreach screen. Matched against the `role` on a profile
@@ -3593,12 +3505,12 @@ el('downloadkitcsv').addEventListener('click', () => {
 // the question you actually open it with is 'who's next', and that
 // wants answering without a filter being touched.
 //
-// The message lives in OUTREACH_MESSAGES at the top of this file, one
-// per sort of business, so writing to the fortieth restaurant is the
-// same one tap as the first. Pressing Write on a row opens your mail
-// app with it already filled in and moves the row on, because a tracker
-// you have to update by hand after every send is a tracker that goes
-// stale by Thursday.
+// The message is written on this screen, one per sort of business, and
+// kept in the database — so writing to the fortieth restaurant is the
+// same one tap as the first. Pressing Send on a row sends it from your
+// own address through your own mail provider and moves the row on,
+// because a tracker you have to update by hand after every send is a
+// tracker that goes stale by Thursday.
 //
 // Nothing in here can be reached by anyone whose profile role isn't on
 // OUTREACH_ROLES at the top of this file. Hiding the menu item is
@@ -3611,7 +3523,7 @@ let reachKind = 'any';
 let reachState = 'any';
 let reachSearch = '';
 
-const REACH_COLUMNS = 'id, name, kind, area, contact, email, phone, notes, '
+const REACH_COLUMNS = 'id, name, kind, area, contact, email, phone, website, notes, '
                     + 'status, sent_on, chase_on';
 
 function reachKindEntry(value) {
@@ -3661,6 +3573,12 @@ async function loadOutreach() {
     return;
   }
 
+  // The messages come down with the businesses rather than on their own
+  // trip, because the screen is no use without both.
+  await loadMessages();
+  msgDraft = {};
+  renderMessage();
+
   const { data, error } = await supabase
     .from('outreach')
     .select(REACH_COLUMNS)
@@ -3678,6 +3596,13 @@ async function loadOutreach() {
 }
 
 // ---- the message ----
+//
+// One message per sort of business, typed on this screen and kept in
+// the database rather than in this file. The chips pick which one
+// you're looking at; the box under them is the message itself and is
+// editable in place. It saves when you press Save, and the button
+// tells you when there's something unsaved sitting in it, because a
+// box that looks saved and isn't is worse than no box.
 
 // 'Hi Sarah' if there's a name on the row, plain 'Hello' if there
 // isn't. A first name only, because 'Hi Sarah Bell' reads like a bank.
@@ -3692,11 +3617,20 @@ function signOff() {
   return '\n\nBest,\n' + ME.name + '\n' + ME.company + '\n' + ME.phone;
 }
 
-// The message for one row, filled in. Pass nothing and you get the
-// sample the panel at the top of the screen shows, with the gaps left
-// visible so you can see what's about to be substituted.
+// The message for one row, filled in. Pass nothing for the row and you
+// get the sample the panel shows, with the gaps left visible so you can
+// see what's about to be substituted.
+//
+// Returns null when you haven't written a message for that sort of
+// business yet. Everything that calls this checks, because sending a
+// blank email to a stranger is the one mistake here you can't take back.
 function messageFor(kind, row) {
-  const template = OUTREACH_MESSAGES[kind] || OUTREACH_MESSAGES.other;
+  const template = OUTREACH_MESSAGES[kind];
+  if (!template) return null;
+
+  const subject = String(template.subject || '').trim();
+  const body    = String(template.body || '').trim();
+  if (!subject && !body) return null;
 
   const business = row ? String(row.name || '') : '[business name]';
   const hello    = row ? greeting(row) : 'Hello';
@@ -3706,28 +3640,121 @@ function messageFor(kind, row) {
     .split('{hello}').join(hello);
 
   return {
-    subject: fill(template.subject),
-    body:    fill(template.body) + signOff()
+    subject: fill(subject),
+    body:    fill(body) + signOff()
   };
+}
+
+// ---- loading and saving what you've typed ----
+
+// Reads every message for your team in one go. Called once when the
+// outreach screen loads, same as the businesses themselves.
+async function loadMessages() {
+  const { data, error } = await supabase
+    .from('outreach_messages')
+    .select('kind, subject, body');
+
+  OUTREACH_MESSAGES = {};
+
+  if (error) {
+    flash('Couldn’t load your messages: ' + error.message);
+    return;
+  }
+
+  (data || []).forEach((row) => {
+    OUTREACH_MESSAGES[row.kind] = { subject: row.subject || '', body: row.body || '' };
+  });
+}
+
+// One row per team per kind, so saving the same kind twice edits rather
+// than piles up. The team is stamped on by the database.
+async function saveMessage(kind, subject, body) {
+  const { error } = await supabase
+    .from('outreach_messages')
+    .upsert({ team_id: teamId, kind: kind, subject: subject, body: body },
+            { onConflict: 'team_id,kind' });
+
+  return error ? error.message : null;
 }
 
 let msgKind = OUTREACH_KINDS[0].value;
 let msgOpen = true;
 
-function renderMessage() {
-  el('msgchips').innerHTML = OUTREACH_KINDS.map((k) => `
-    <button type="button" class="chip${k.value === msgKind ? ' on' : ''}"
-            data-msg-kind="${escapeAttr(k.value)}">${escapeText(k.word)}</button>`).join('');
+// What's in the two boxes right now, whether or not it's been saved.
+// Kept here rather than read off the elements each time so that
+// flicking between chips doesn't lose half-typed work.
+let msgDraft = {};
 
-  const note = messageFor(msgKind, null);
+function draftFor(kind) {
+  if (!msgDraft[kind]) {
+    const saved = OUTREACH_MESSAGES[kind] || { subject: '', body: '' };
+    msgDraft[kind] = { subject: saved.subject || '', body: saved.body || '' };
+  }
+  return msgDraft[kind];
+}
+
+// True when what's in the box differs from what the database has.
+function msgUnsaved(kind) {
+  const saved = OUTREACH_MESSAGES[kind] || { subject: '', body: '' };
+  const draft = draftFor(kind);
+  return draft.subject !== (saved.subject || '') || draft.body !== (saved.body || '');
+}
+
+function renderMessage() {
+  el('msgchips').innerHTML = OUTREACH_KINDS.map((k) => {
+    const written = OUTREACH_MESSAGES[k.value]
+      && String(OUTREACH_MESSAGES[k.value].body || '').trim();
+
+    // A quiet dot on the ones you've actually written, so you can see
+    // at a glance which sorts of business you're covered for.
+    return `
+    <button type="button" class="chip${k.value === msgKind ? ' on' : ''}"
+            data-msg-kind="${escapeAttr(k.value)}">${escapeText(k.word)}${
+      written ? ' &middot;' : ''}</button>`;
+  }).join('');
+
+  const draft = draftFor(msgKind);
+  const word  = (reachKindEntry(msgKind) || {}).word || 'this sort';
 
   el('msgbox').innerHTML = `
-    <div class="msgsub">${escapeText(note.subject)}</div>
-    <div class="msgbody">${escapeText(note.body)}</div>`;
+    <input type="text" class="msgsubin" id="msgsubject"
+           placeholder="Subject line — try: Video for {business}"
+           value="${escapeAttr(draft.subject)}">
+    <textarea class="msgbodyin" id="msgbodyin" rows="12"
+              placeholder="Write what you'd send to ${escapeText(word.toLowerCase())}.
+
+{hello}, becomes 'Hi Sarah' when there's a name on the row and 'Hello' when there isn't.
+{business} becomes the name of the business.
+
+Don't sign it off — your name, BGL Media and your number go on the bottom automatically.">${escapeText(draft.body)}</textarea>
+    <div class="msghint">{business} and {hello} get filled in from the row. Your sign-off is added underneath.</div>`;
 
   el('msgbox').classList.toggle('hidden', !msgOpen);
   el('copywrap').classList.toggle('hidden', !msgOpen);
+  el('savemsgwrap').classList.toggle('hidden', !msgOpen);
   el('hidemsg').textContent = msgOpen ? 'Put it away' : 'Show the message';
+
+  const dirty = msgUnsaved(msgKind);
+  el('savemsg').textContent = dirty ? 'Save this message' : 'Saved';
+  el('savemsg').disabled = !dirty;
+
+  el('msgsubject').addEventListener('input', (event) => {
+    draftFor(msgKind).subject = event.target.value;
+    markMsgDirty();
+  });
+
+  el('msgbodyin').addEventListener('input', (event) => {
+    draftFor(msgKind).body = event.target.value;
+    markMsgDirty();
+  });
+}
+
+// Just the button, not the whole panel — redrawing the panel on every
+// keystroke would take the cursor away from you mid-word.
+function markMsgDirty() {
+  const dirty = msgUnsaved(msgKind);
+  el('savemsg').textContent = dirty ? 'Save this message' : 'Saved';
+  el('savemsg').disabled = !dirty;
 }
 
 el('msgchips').addEventListener('click', (event) => {
@@ -3743,8 +3770,34 @@ el('hidemsg').addEventListener('click', () => {
   renderMessage();
 });
 
+el('savemsg').addEventListener('click', async () => {
+  const draft = draftFor(msgKind);
+
+  el('savemsg').disabled = true;
+  el('savemsg').textContent = 'Saving…';
+
+  const problem = await saveMessage(msgKind, draft.subject.trim(), draft.body.trim());
+
+  if (problem) {
+    flash('That didn’t save: ' + problem);
+    markMsgDirty();
+    return;
+  }
+
+  OUTREACH_MESSAGES[msgKind] = { subject: draft.subject.trim(), body: draft.body.trim() };
+  flash('Saved. That’s what ' + ((reachKindEntry(msgKind) || {}).word || 'businesses')
+        .toLowerCase() + ' get from now on.');
+  renderMessage();
+});
+
 el('copymsg').addEventListener('click', async () => {
   const note = messageFor(msgKind, null);
+
+  if (!note) {
+    flash('Nothing written for that sort yet.');
+    return;
+  }
+
   const text = note.subject + '\n\n' + note.body;
 
   try {
@@ -3889,7 +3942,7 @@ function renderOutreach() {
     el('olist').innerHTML = reach.length
       ? '<div class="empty">Nothing matches that.</div>'
       : '<div class="empty">Nobody on the list yet. Add the first one above, '
-        + 'then press Write when you\'re ready to send.</div>';
+        + 'then press Send when you\'re ready.</div>';
     return;
   }
 
@@ -3925,6 +3978,13 @@ function reachRowHTML(row) {
   const kind = reachKindWord(row.kind);
   const tone = reachStateTone(row.status);
 
+  // The address as typed is what's shown; the https:// is only added for
+  // the link itself, so 'curlettjones.co.uk' stays readable on the row.
+  const site = row.website
+    ? ` &middot; <a class="osite" href="${escapeAttr(reachURL(row.website))}"
+         target="_blank" rel="noopener">${escapeText(row.website)}</a>`
+    : '';
+
   // Who and where, on one line, with the bits that aren't filled in
   // left out rather than left as gaps.
   const meta = [row.contact, row.email || row.phone, row.area]
@@ -3946,10 +4006,10 @@ function reachRowHTML(row) {
           <div class="oname">${escapeText(row.name)}</div>
           ${meta ? `<div class="ometa">${meta}</div>` : ''}
           ${row.notes ? `<div class="onote">${escapeText(row.notes)}</div>` : ''}
-          <div class="okind">${escapeText(kind)}</div>
+          <div class="okind">${escapeText(kind)}${site}</div>
         </div>
         <div class="end">
-          <button type="button" class="pill write" data-o-write="${escapeAttr(row.id)}">Write</button>
+          <button type="button" class="pill write" data-o-write="${escapeAttr(row.id)}">Send</button>
           <button type="button" class="pill st" data-o-status="${escapeAttr(row.id)}"
                   style="color:var(${tone});border-color:var(${tone})"
                   >${escapeText(reachStateWord(row.status))}</button>
@@ -3957,6 +4017,13 @@ function reachRowHTML(row) {
         </div>
       </div>
     </div>`;
+}
+
+// Websites get typed without the https:// far more often than with it,
+// and a link that doesn't work is worse than no link.
+function reachURL(value) {
+  const text = String(value || '').trim();
+  return /^https?:\/\//i.test(text) ? text : 'https://' + text;
 }
 
 function findReach(id) {
@@ -4066,6 +4133,10 @@ el('olist').addEventListener('click', async (event) => {
   const write = event.target.closest('button[data-o-write]');
   if (write) { writeTo(findReach(write.dataset.oWrite)); return; }
 
+  // A link is a link. Without this, tapping the website would open the
+  // edit form underneath the new tab.
+  if (event.target.closest('a')) return;
+
   // Anywhere else on the row opens it for editing, same as kit.
   const open = event.target.closest('[data-o-open]');
   if (open) {
@@ -4074,15 +4145,58 @@ el('olist').addEventListener('click', async (event) => {
   }
 });
 
-// ---- pressing Write ----
+// ---- pressing Send ----
 //
-// Opens your mail app with the right message already in it, and moves a
-// row that hasn't been written to yet on to Sent with a chase date a
-// week out. The flash says so, and the pill next to it puts it back in
-// one tap, so nothing happens silently that you can't see or undo.
+// Sends the message from your own address, through your own mail
+// provider, and moves a row that hasn't been written to yet on to Sent
+// with a chase date a week out. The flash says so, and the pill next to
+// it puts it back in one tap, so nothing happens silently that you
+// can't see or undo.
+//
+// The sending itself does not happen here. A browser cannot speak SMTP,
+// and even if it could, this file is served publicly — a mail password
+// sitting in it would be a mail password anyone could read and send as
+// you from. So the message goes to a small function running on
+// Supabase, which holds the password and does the talking. See
+// supabase/functions/send-email/index.ts.
+
+// Hands one message to that function. Returns null if it went, or
+// something to put on screen if it didn't.
+async function sendEmail(to, subject, body) {
+  try {
+    const { data, error } = await supabase.functions.invoke('send-email', {
+      body: { to: to, subject: subject, text: body }
+    });
+
+    // A refusal from the function itself comes back in the body rather
+    // than as a thrown error, so both are worth reading.
+    if (error) return error.message || 'The mail server wouldn’t take it.';
+    if (data && data.error) return String(data.error);
+
+    return null;
+  } catch (problem) {
+    return problem && problem.message ? problem.message : 'The mail server couldn’t be reached.';
+  }
+}
+
+// The old behaviour, kept as a way out. If the send fails — the mail
+// server is down, the password has expired, you're on a train with no
+// signal — this puts the same message in your mail app so the row still
+// gets written to today.
+function openInMailApp(row, note) {
+  window.location.href = 'mailto:' + encodeURIComponent(row.email)
+    + '?subject=' + encodeURIComponent(note.subject)
+    + '&body=' + encodeURIComponent(note.body);
+}
+
+// Whether a send is in flight, so a second tap on a slow connection
+// doesn't send the same email twice.
+let sending = false;
 
 async function writeTo(row) {
   if (!row) return;
+
+  if (sending) return;
 
   if (!row.email) {
     flash('No email on that one yet — add one and it’ll be one tap.');
@@ -4092,19 +4206,44 @@ async function writeTo(row) {
 
   const note = messageFor(row.kind, row);
 
-  const href = 'mailto:' + encodeURIComponent(row.email)
-    + '?subject=' + encodeURIComponent(note.subject)
-    + '&body=' + encodeURIComponent(note.body);
+  // Nothing written for that sort of business yet. Better to say so and
+  // open the box than to send a stranger an empty email.
+  if (!note) {
+    const word = (reachKindEntry(row.kind) || {}).word || 'that sort';
+    flash('No message written for ' + word.toLowerCase() + ' yet. Write one first.');
+    msgKind = row.kind;
+    msgOpen = true;
+    renderMessage();
+    el('msgbox').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
 
-  window.location.href = href;
+  sending = true;
+  flash('Sending to ' + row.name + '…');
+
+  const problem = await sendEmail(row.email, note.subject, note.body);
+
+  sending = false;
+
+  if (problem) {
+    // Deliberately not moving the row on. It didn't send, so the list
+    // shouldn't say it did.
+    flash('That didn’t send: ' + problem + ' Opening your mail app instead.');
+    openInMailApp(row, note);
+    return;
+  }
 
   const entry = reachStateEntry(row.status);
-  if (entry && entry.stage !== 'todo') return;
+  if (entry && entry.stage !== 'todo') {
+    flash('Sent to ' + row.name + '.');
+    return;
+  }
 
-  const problem = await patchReach(row.id, datesFor(row, 'sent'));
-  if (problem) { flash(problem); return; }
+  const trouble = await patchReach(row.id, datesFor(row, 'sent'));
+  if (trouble) { flash('Sent, but the list didn’t update: ' + trouble); return; }
 
-  flash('Marked as sent, chase set for ' + dotDate(addDays(todayISO(), FOLLOW_UP_DAYS)) + '.');
+  flash('Sent. Marked as sent, chase set for '
+        + dotDate(addDays(todayISO(), FOLLOW_UP_DAYS)) + '.');
   loadOutreach();
 }
 
@@ -4151,6 +4290,7 @@ function startEditReach(row) {
   el('newreach').reset();
   el('f_o_name').value    = row.name || '';
   el('f_o_area').value    = row.area || '';
+  el('f_o_site').value    = row.website || '';
   el('f_o_contact').value = row.contact || '';
   el('f_o_email').value   = row.email || '';
   el('f_o_phone').value   = row.phone || '';
@@ -4231,6 +4371,7 @@ el('newreach').addEventListener('submit', async (event) => {
     name:     name,
     kind:     el('f_o_kind').value,
     area:     el('f_o_area').value.trim() || null,
+    website:  el('f_o_site').value.trim() || null,
     contact:  el('f_o_contact').value.trim() || null,
     email:    el('f_o_email').value.trim() || null,
     phone:    el('f_o_phone').value.trim() || null,
@@ -4242,7 +4383,7 @@ el('newreach').addEventListener('submit', async (event) => {
 
   // Set by hand to something that's waiting on a reply, with no chase
   // date filled in? Then the form fills it in, the same week out that
-  // pressing Write would have used. One less thing to remember.
+  // pressing Send would have used. One less thing to remember.
   if (entry && entry.chase && !row.chase_on) {
     row.chase_on = addDays(row.sent_on || todayISO(), FOLLOW_UP_DAYS);
   }
@@ -4286,7 +4427,7 @@ el('downloadreachcsv').addEventListener('click', () => {
   if (!rows.length) { flash('Nothing to export in that view.'); return; }
 
   const head = ['BUSINESS', 'WHAT THEY ARE', 'WHERE', 'CONTACT', 'EMAIL',
-                'PHONE', 'STATUS', 'WRITTEN', 'CHASE', 'NOTES'];
+                'PHONE', 'WEBSITE', 'STATUS', 'WRITTEN', 'CHASE', 'NOTES'];
 
   const order = (row) => {
     const i = OUTREACH_STATES.findIndex((s) => s.value === row.status);
@@ -4303,6 +4444,7 @@ el('downloadreachcsv').addEventListener('click', () => {
       row.contact || '',
       row.email || '',
       row.phone || '',
+      row.website || '',
       reachStateWord(row.status),
       row.sent_on ? dotDate(row.sent_on) : '',
       row.chase_on ? dotDate(row.chase_on) : '',
