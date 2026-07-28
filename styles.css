@@ -1,0 +1,285 @@
+/* BGL Media — styles.
+   Colours, type and layout. Nothing in here changes what the app does. */
+
+:root {
+  --paper: #E7E8E1;
+  --card:  #F2F2ED;
+  --ink:   #1B1D19;
+  --ink2:  #55584F;
+  --ink3:  #8A8D82;
+  --rule:  #C9CBC0;
+  --stamp: #A83A2B;
+  --mono:  ui-monospace, Menlo, Consolas, monospace;
+}
+body {
+  margin: 0; min-height: 100vh;
+  display: flex; align-items: flex-start; justify-content: center;
+  background: var(--paper); color: var(--ink);
+  font-family: system-ui, -apple-system, sans-serif;
+  padding: 24px 24px 100px;
+}
+main { width: 100%; max-width: 560px; }
+h1 {
+  font-size: 34px; line-height: 0.95; letter-spacing: 0.01em;
+  text-transform: uppercase; margin: 0 0 14px;
+}
+.rule { height: 5px; display: flex; margin-bottom: 20px; }
+.rule span { flex: 1; }
+.label {
+  font-family: var(--mono);
+  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink3); margin-bottom: 6px;
+}
+.label.gap { margin-top: 26px; }
+input, select {
+  width: 100%; box-sizing: border-box; padding: 11px 12px; margin-bottom: 14px;
+  font-family: inherit; font-size: 16px;
+  background: var(--card); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: 0;
+}
+select { -webkit-appearance: none; appearance: none; }
+input:focus, select:focus { outline: 2px solid var(--ink); outline-offset: -1px; }
+button {
+  width: 100%; padding: 12px; font-family: inherit; font-size: 15px;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  background: var(--ink); color: var(--paper); border: none; cursor: pointer;
+}
+button:hover { background: var(--stamp); }
+button:disabled { background: var(--ink3); cursor: default; }
+button.quiet {
+  background: none; color: var(--ink2); border: 1px solid var(--rule);
+  font-size: 12px; padding: 9px;
+}
+button.quiet:hover { background: var(--card); color: var(--ink); }
+p { font-size: 14px; line-height: 1.6; margin: 0 0 12px; }
+.error {
+  background: #F7E4E1; border-left: 3px solid var(--stamp); color: #7A2A1E;
+  padding: 11px 13px; margin-bottom: 14px; font-size: 13px; line-height: 1.5;
+}
+.flash {
+  background: #E3EBDF; border-left: 3px solid #4A7A42; color: #2F5429;
+  padding: 11px 13px; margin-bottom: 14px; font-size: 13px; line-height: 1.5;
+}
+.hidden { display: none; }
+.who {
+  font-family: var(--mono);
+  font-size: 13px; word-break: break-all; margin-bottom: 20px;
+}
+
+/* ---- the tab bar along the bottom ---- */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  background: var(--card); border-top: 1px solid var(--rule);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tabinner { max-width: 560px; margin: 0 auto; display: flex; }
+.tab {
+  flex: 1; width: auto; padding: 9px 0 10px;
+  background: none; color: var(--ink3); border: none;
+  border-top: 2px solid transparent; margin-top: -1px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em;
+}
+.tab svg {
+  width: 21px; height: 21px;
+  fill: none; stroke: currentColor; stroke-width: 1.6;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.tab:hover { background: none; color: var(--ink); }
+.tab.on { color: var(--ink); border-top-color: var(--ink); }
+
+/* ---- home: the next shoot ---- */
+.nextup {
+  background: var(--card); border-left: 4px solid var(--ink3);
+  padding: 14px; margin-bottom: 20px;
+}
+.nextup .bigdate {
+  font-family: var(--mono); font-size: 13px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+.nextup .bigvenue { font-size: 20px; line-height: 1.2; margin-top: 7px; }
+.nextup .bigmeta { font-size: 14px; color: var(--ink2); margin-top: 3px; }
+.nextup .in {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink3); margin-top: 9px;
+}
+
+/* ---- a compact row, used on home and in the calendar ---- */
+.mini {
+  background: var(--card);
+  border-left: 4px solid var(--ink3);
+  border-bottom: 1px solid var(--rule);
+  padding: 11px 12px; margin-bottom: 1px;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+.mini .mv { font-size: 15px; font-weight: 600; line-height: 1.25; }
+.mini .mm { font-size: 12px; color: var(--ink2); margin-top: 3px; }
+.mini .mf { font-family: var(--mono); font-size: 15px; white-space: nowrap; }
+.tag {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--stamp);
+  border: 1px solid currentColor; padding: 2px 6px; white-space: nowrap;
+}
+
+/* ---- who's on it ---- */
+.crewtag {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em;
+  display: inline-block; padding: 2px 5px; line-height: 1.3;
+  background: var(--rule); color: var(--ink); vertical-align: 1px;
+}
+.chip .swatch {
+  display: inline-block; width: 7px; height: 7px;
+  margin-right: 5px; vertical-align: 0;
+}
+
+/* ---- the calendar ---- */
+.callegend {
+  display: flex; flex-wrap: wrap; gap: 12px;
+  margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--rule);
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink2);
+}
+.callegend span { display: inline-block; width: 7px; height: 7px; margin-right: 5px; }
+.calnav {
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1.5px solid var(--ink); padding-bottom: 7px; margin-bottom: 10px;
+}
+.calnav button {
+  width: 36px; padding: 3px 0; font-size: 16px; line-height: 1.4;
+  background: none; color: var(--ink); border: 1px solid var(--rule);
+}
+.calnav button:hover { background: var(--ink); color: var(--paper); }
+.calnav .m {
+  font-family: var(--mono); font-size: 12px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+}
+.calgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
+.dow {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--ink3);
+  text-align: center; padding: 2px 0 6px;
+}
+.day {
+  width: auto; aspect-ratio: 1 / 1; padding: 0;
+  background: var(--card); color: var(--ink); border: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  font-family: var(--mono); font-size: 13px; letter-spacing: 0; text-transform: none;
+}
+.day:hover { background: var(--rule); color: var(--ink); }
+.day.out { background: var(--paper); color: var(--ink3); }
+.day.today { outline: 1.5px solid var(--ink); outline-offset: -1.5px; }
+.day.on { background: var(--ink); color: var(--paper); }
+.pips { display: flex; gap: 2px; height: 5px; }
+.pips i { width: 5px; height: 5px; display: block; }
+
+/* ---- add a shoot ---- */
+#newshoot {
+  border: 1px solid var(--ink); padding: 16px 16px 6px;
+  margin-bottom: 20px;
+}
+.formtitle {
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--ink);
+  border-bottom: 1.5px solid var(--ink); padding-bottom: 6px; margin-bottom: 14px;
+}
+.pair { display: flex; gap: 10px; }
+.pair > div { flex: 1; min-width: 0; }
+#openform { margin-bottom: 20px; }
+
+/* ---- the summary strip ---- */
+.tally {
+  display: flex; background: var(--card);
+  border: 1px solid var(--rule); margin-bottom: 20px;
+}
+.tally > div {
+  flex: 1; min-width: 0; padding: 11px 10px 12px;
+  border-left: 1px solid var(--rule);
+}
+.tally > div:first-child { border-left: none; }
+.tally .label { margin: 0; min-height: 26px; line-height: 1.2; }
+.tally .fig { font-family: var(--mono); font-size: 19px; line-height: 1.1; margin-top: 4px; }
+.tally .sub {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+  color: var(--ink3); margin-top: 5px;
+}
+
+/* ---- the filter bar ---- */
+.filters { margin-bottom: 18px; }
+.filters input {
+  margin-bottom: 10px; padding: 10px 12px; font-size: 15px;
+  -webkit-appearance: none; appearance: none;
+}
+.filters .chips { gap: 5px; margin-bottom: 6px; }
+.filters .chips:last-child { margin-bottom: 0; }
+.filters .chip { padding: 6px 9px; font-size: 10px; }
+
+/* ---- the shoot list ---- */
+.listhead {
+  display: flex; justify-content: space-between; align-items: baseline;
+  border-bottom: 1.5px solid var(--ink); padding-bottom: 6px; margin-bottom: 0;
+}
+.shootwrap {
+  background: var(--card);
+  border-left: 4px solid var(--ink3);
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 1px;
+}
+.shoot { display: flex; gap: 14px; padding: 13px 0 13px 12px; }
+.shoot .when { min-width: 92px; }
+.shoot .date {
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink);
+}
+.shoot .time {
+  font-family: var(--mono); font-size: 11px; color: var(--ink3); margin-top: 3px;
+}
+.shoot .mid { flex: 1; min-width: 0; }
+.shoot .venue { font-size: 15px; font-weight: 600; line-height: 1.25; }
+.shoot .client { font-size: 13px; color: var(--ink2); margin-top: 2px; }
+.shoot .type {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink3); margin-top: 5px;
+}
+.shoot .end {
+  text-align: right; display: flex; flex-direction: column;
+  justify-content: center; gap: 6px; min-width: 86px; padding-right: 6px;
+}
+.shoot .fee { font-family: var(--mono); font-size: 17px; }
+.shoot .status {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em;
+  text-transform: uppercase; border: 1px solid currentColor;
+  padding: 1px 5px; align-self: flex-end;
+}
+/* ---- the row menu ---- */
+.dots {
+  width: 36px; flex: 0 0 36px; padding: 0; align-self: stretch;
+  background: none; color: var(--ink3);
+  border: none; border-left: 1px solid var(--rule);
+  font-size: 20px; line-height: 1; letter-spacing: 0;
+}
+.dots:hover { background: var(--rule); color: var(--ink); }
+.dots.open { background: var(--ink); color: var(--paper); }
+.menu { background: var(--paper); border-top: 1px solid var(--rule); padding: 12px 12px 2px; }
+.menu .error { margin-bottom: 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.chip {
+  width: auto; flex: 0 0 auto; padding: 7px 11px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em;
+  background: var(--card); color: var(--ink2); border: 1px solid var(--rule);
+}
+.chip:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.chip.on { background: var(--ink); color: var(--paper); border-color: var(--ink); cursor: default; }
+.chip.danger { color: var(--stamp); border-color: #D9BDB7; }
+.chip.danger:hover, .chip.armed {
+  background: var(--stamp); color: var(--paper); border-color: var(--stamp);
+}
+
+.empty {
+  padding: 26px 14px; text-align: center; color: var(--ink2);
+  font-size: 14px; background: var(--card); border-bottom: 1px solid var(--rule);
+}
+.count {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink3);
+}
+.spacer { height: 24px; }
