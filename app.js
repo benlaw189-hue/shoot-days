@@ -1,5 +1,6 @@
 // BGL Media — the logic.
-// Talks to Supabase, draws the four screens, handles the form and the row menus.
+// Talks to Supabase, draws the five screens, handles the forms, the row menus
+// and the invoice PDFs.
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
@@ -40,12 +41,44 @@ const DEFAULT_TAG_BY_EMAIL = {
 };
 // ============================================================
 
+// ============================================================
+// EDIT THIS. What goes in the top-right of every invoice, and the bank
+// details at the bottom. Taken from your template.
+//
+// Worth knowing: this file is served publicly, so anyone who finds the
+// address can read it. Your sort code and account number go out on every
+// invoice you send anyway, so this isn't a new exposure — but if you'd
+// rather they weren't sitting in a file on the open web, say so and
+// they can move into the database behind the same rules as everything else.
+// ============================================================
+const ME = {
+  name:    'Benjamin Law',
+  company: 'BGL Media',
+  address: '4, Bodmin Ave, Southport, PR9 9TU',
+  phone:   '+44 7585 430643',
+  email:   'benlaw@bglmedia.uk',
+
+  // Invoice numbers are this, then three digits: BGLM001, BGLM002...
+  prefix:  'BGLM',
+
+  bank: [
+    'Account name: B G Law',
+    'Sort code: 04-00-06',
+    'Account no: 94787148'
+  ]
+};
+// ============================================================
+
 let myTag = '';
 
 // Am I an owner? Answered by the database, not by anything in this file.
 // If it lies, it can only lie downwards — the policies decide what actually
 // comes back over the wire, and this only decides what the form offers.
 let isOwner = false;
+
+// Am I allowed to invoice? Same story. Hiding the menu item is tidiness;
+// the row-level rules in invoices.sql are the actual lock.
+let canInvoice = false;
 
 // shoot_id -> { actual_fee, shared }. For a non-owner this only ever holds
 // the jobs that have been unlocked, because the rest never arrive.
@@ -142,6 +175,21 @@ function longDate(value) {
     .toUpperCase();
 }
 
+// '2026-08-15' -> '15.08.26'. The format your template uses.
+function dotDate(value) {
+  if (!value) return '';
+  const [y, m, d] = String(value).split('-');
+  return `${d}.${m}.${y.slice(2)}`;
+}
+
+// '2026-08-15' + 7 -> '2026-08-22'
+function addDays(value, days) {
+  const [y, m, d] = String(value).split('-').map(Number);
+  const out = new Date(y, m - 1, d);
+  out.setDate(out.getDate() + Number(days || 0));
+  return isoOf(out);
+}
+
 // How many sleeps away a date is. Negative means it's been and gone.
 function daysUntil(value) {
   const [y, m, d] = value.split('-').map(Number);
@@ -158,6 +206,13 @@ function shortTime(value) {
 
 function money(value) {
   return '£' + Number(value || 0).toLocaleString('en-GB', { maximumFractionDigits: 0 });
+}
+
+// Invoices show the pence. A schedule doesn't need to; a bill does.
+function money2(value) {
+  return '£' + Number(value || 0).toLocaleString('en-GB', {
+    minimumFractionDigits: 2, maximumFractionDigits: 2
+  });
 }
 
 // What this signed-in person should see for a shoot. `actual` is null when
@@ -219,29 +274,79 @@ function flash(message) {
 
 // ---- which screen is showing ----
 
-const SCREENS = ['home', 'shoots', 'calendar', 'more'];
+const SCREENS = ['home', 'shoots', 'calendar', 'invoices', 'more'];
+
+// Invoices and Account both live behind the More menu, so both light up
+// the More tab. Everything else lights up its own.
+const TAB_FOR = {
+  home: 'home', shoots: 'shoots', calendar: 'calendar',
+  invoices: 'more', more: 'more'
+};
 
 function goto(name) {
   SCREENS.forEach((n) => {
     el('screen-' + n).classList.toggle('hidden', n !== name);
   });
+  const lit = TAB_FOR[name] || name;
   document.querySelectorAll('.tab').forEach((tab) => {
-    tab.classList.toggle('on', tab.dataset.tab === name);
+    tab.classList.toggle('on', tab.dataset.tab === lit);
   });
+  closeMoreMenu();
   window.scrollTo(0, 0);
 }
+
+// ---- the More menu ----
+
+function openMoreMenu() {
+  show('moremenu');
+  show('scrim');
+  el('moretab').setAttribute('aria-expanded', 'true');
+}
+
+function closeMoreMenu() {
+  hide('moremenu');
+  hide('scrim');
+  el('moretab').setAttribute('aria-expanded', 'false');
+}
+
+el('scrim').addEventListener('click', closeMoreMenu);
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeMoreMenu();
+});
 
 el('tabs').addEventListener('click', (event) => {
   const button = event.target.closest('button[data-tab]');
   if (!button) return;
 
-  // Add isn't a screen of its own — it's the schedule with the form already open.
+  // More isn't a screen — it's a menu that drops up out of the bar.
+  if (button.dataset.tab === 'more') {
+    if (el('moremenu').classList.contains('hidden')) openMoreMenu();
+    else closeMoreMenu();
+    return;
+  }
+
+  // Add isn't a screen of its own either — it's the schedule with the
+  // form already open.
   if (button.dataset.tab === 'add') {
     goto('shoots');
     openForm();
     return;
   }
   goto(button.dataset.tab);
+});
+
+el('moremenu').addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-go]');
+  if (!button) return;
+
+  closeMoreMenu();
+
+  if (button.dataset.go === 'signout') {
+    await supabase.auth.signOut();
+    return;
+  }
+  goto(button.dataset.go);
 });
 
 // ---- the team this signed-in person belongs to ----
@@ -252,15 +357,17 @@ let teamId = null;
 async function loadProfile(userId) {
   teamId = null;
   isOwner = false;
+  canInvoice = false;
 
   const { data } = await supabase
     .from('profiles')
-    .select('team_id, full_name, title, role')
+    .select('team_id, full_name, title, role, can_invoice')
     .eq('id', userId)
     .maybeSingle();
 
   if (data) {
     teamId = data.team_id || null;
+    canInvoice = data.can_invoice === true;
     el('whoname').textContent = data.full_name || '';
     el('whotitle').textContent = data.title || data.role || '';
   }
@@ -274,6 +381,7 @@ async function loadProfile(userId) {
   el('clientfee').classList.toggle('hidden', !isOwner);
   el('feelabel').innerHTML = isOwner ? 'Fee on schedule &pound;' : 'Fee &pound;';
 
+  el('mi_invoices').classList.toggle('hidden', !canInvoice);
 }
 
 function fillSelect(id, values) {
@@ -331,7 +439,7 @@ const COLUMNS = 'id, shoot_date, call_time, venue, client, fee, job_type, status
 // the schedule fee where the client fee belongs and then corrects itself.
 async function refresh() {
   await loadFees();
-  await Promise.all([loadAll(), loadShoots()]);
+  await Promise.all([loadAll(), loadShoots(), loadInvoices()]);
 }
 
 async function loadFees() {
@@ -364,6 +472,7 @@ async function loadAll() {
   allShoots = data || [];
   renderHome();
   renderCalendar();
+  buildClientList();
 }
 
 async function loadShoots() {
@@ -673,8 +782,8 @@ function findShoot(id) {
 }
 
 function closeAllMenus() {
-  document.querySelectorAll('#list .menu').forEach((m) => m.classList.add('hidden'));
-  document.querySelectorAll('#list .dots').forEach((d) => {
+  document.querySelectorAll('.menu').forEach((m) => m.classList.add('hidden'));
+  document.querySelectorAll('.dots').forEach((d) => {
     d.classList.remove('open');
     d.setAttribute('aria-expanded', 'false');
   });
@@ -1004,6 +1113,853 @@ async function saveClientFee(shootId) {
   return error ? 'The shoot saved, but the client fee did not: ' + error.message : null;
 }
 
+// ============================================================
+// Invoices
+//
+// An invoice is one row. Its lines live inside that row as a small list,
+// because an invoice is only ever read whole — splitting them into their
+// own table would buy nothing and cost a second query every time.
+//
+// The PDF is not stored anywhere. It's redrawn from the row whenever you
+// ask for it, which means the file you download in a year's time is
+// generated from the same numbers you saved today, and there's no second
+// copy that can drift out of step with the first.
+// ============================================================
+
+let invoices = [];
+let invFilter = 'all';
+let editingInvoice = null;
+
+const INV_FILTERS = [
+  ['all',   'Everything'],
+  ['draft', 'Draft'],
+  ['sent',  'Sent'],
+  ['chase', 'To chase'],
+  ['paid',  'Paid']
+];
+
+// Sent, and the due date has passed. This is the only derived state —
+// the other three are stored words.
+function isLate(inv) {
+  return inv.status === 'sent' && String(inv.due_on) < todayISO();
+}
+
+function invColour(inv) {
+  if (inv.status === 'paid') return 'var(--paid)';
+  if (isLate(inv)) return 'var(--stamp)';
+  if (inv.status === 'sent') return 'var(--accent-4)';
+  return 'var(--neutral)';
+}
+
+async function loadInvoices() {
+  if (!canInvoice) { invoices = []; return; }
+
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('*')
+    .order('seq', { ascending: false });
+
+  if (error) {
+    invoices = [];
+    el('invlist').innerHTML = '<div class="error">Error: ' + escapeText(error.message) + '</div>';
+    return;
+  }
+
+  invoices = data || [];
+  renderInvoices();
+}
+
+function renderInvoices() {
+  const sent  = invoices.filter((i) => i.status === 'sent');
+  const paid  = invoices.filter((i) => i.status === 'paid');
+  const late  = invoices.filter(isLate);
+
+  const sum = (rows) => rows.reduce((t, r) => t + Number(r.total || 0), 0);
+
+  el('i_sent').textContent = money(sum(sent));
+  el('i_sent_sub').textContent = sent.length + ' awaiting';
+  el('i_paid').textContent = money(sum(paid));
+  el('i_paid_sub').textContent = paid.length + ' settled';
+  el('i_chase').textContent = money(sum(late));
+  el('i_chase_sub').textContent = late.length ? late.length + ' overdue' : 'nothing late';
+
+  buildInvChips();
+
+  const rows = invoices.filter((i) => {
+    if (invFilter === 'all') return true;
+    if (invFilter === 'chase') return isLate(i);
+    return i.status === invFilter;
+  });
+
+  el('invlabel').textContent = (INV_FILTERS.find((f) => f[0] === invFilter) || [])[1] || 'Everything';
+
+  if (!invoices.length) {
+    el('invlist').innerHTML = '<div class="empty">No invoices yet. Make the first one above.</div>';
+    el('invcount').textContent = '0';
+    return;
+  }
+
+  if (!rows.length) {
+    el('invlist').innerHTML = '<div class="empty">Nothing in there.</div>';
+    el('invcount').textContent = '0 of ' + invoices.length;
+    return;
+  }
+
+  el('invcount').textContent = invFilter === 'all'
+    ? rows.length + (rows.length === 1 ? ' invoice' : ' invoices')
+    : rows.length + ' of ' + invoices.length;
+
+  el('invlist').innerHTML = rows.map(invoiceRowHTML).join('');
+}
+
+function buildInvChips() {
+  el('invchips').innerHTML = INV_FILTERS.map(([value, text]) => `
+    <button type="button" class="chip${value === invFilter ? ' on' : ''}"
+            data-inv-filter="${escapeAttr(value)}">${escapeText(text)}</button>`).join('');
+}
+
+el('invchips').addEventListener('click', (event) => {
+  const chip = event.target.closest('button[data-inv-filter]');
+  if (!chip || chip.dataset.invFilter === invFilter) return;
+  invFilter = chip.dataset.invFilter;
+  renderInvoices();
+});
+
+function invoiceRowHTML(inv) {
+  const lines = (inv.lines || []).length;
+  const late = isLate(inv);
+  const overdueBy = late ? Math.abs(daysUntil(inv.due_on)) : 0;
+
+  const note = inv.status === 'paid'
+    ? 'Paid ' + dotDate(inv.paid_on || inv.issued_on)
+    : late
+      ? `<span class="late">${overdueBy} ${overdueBy === 1 ? 'day' : 'days'} late</span>`
+      : 'Due ' + dotDate(inv.due_on);
+
+  const statusChips = ['draft', 'sent', 'paid'].map((s) => `
+        <button type="button" class="chip${s === inv.status ? ' on' : ''}"
+                data-iact="status" data-id="${escapeAttr(inv.id)}" data-value="${s}">${titleCase(s)}</button>`).join('');
+
+  return `
+    <div class="shootwrap inv" data-inv="${escapeAttr(inv.id)}" style="border-left-color:${invColour(inv)}">
+      <div class="shoot">
+        <div class="when">
+          <div class="date">${escapeText(inv.number)}</div>
+          <div class="time">${dotDate(inv.issued_on)}</div>
+        </div>
+        <div class="mid">
+          <div class="venue">${escapeText(inv.client || 'No client')}</div>
+          <div class="client">${lines} ${lines === 1 ? 'line' : 'lines'} &middot; ${note}</div>
+        </div>
+        <div class="end">
+          <div class="fee">${money2(inv.total)}</div>
+          <div class="status" style="color:${invColour(inv)}">${escapeText(late ? 'chase' : inv.status)}</div>
+        </div>
+        <button type="button" class="dots" data-iact="menu" data-id="${escapeAttr(inv.id)}"
+                aria-expanded="false" aria-label="Options for ${escapeAttr(inv.number)}">&#8942;</button>
+      </div>
+      <div class="menu hidden">
+        <div class="error hidden"></div>
+        <div class="label">Status</div>
+        <div class="chips">${statusChips}</div>
+        <div class="chips">
+          <button type="button" class="chip" data-iact="pdf"    data-id="${escapeAttr(inv.id)}">Download PDF</button>
+          <button type="button" class="chip" data-iact="edit"   data-id="${escapeAttr(inv.id)}">Edit</button>
+          <button type="button" class="chip danger" data-iact="delete" data-id="${escapeAttr(inv.id)}">Delete</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function findInvoice(id) {
+  return invoices.find((i) => String(i.id) === String(id));
+}
+
+el('invlist').addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-iact]');
+  if (!button) return;
+
+  const id = button.dataset.id;
+  const wrap = button.closest('.shootwrap');
+  const menu = wrap.querySelector('.menu');
+  const act = button.dataset.iact;
+  const inv = findInvoice(id);
+
+  if (act === 'menu') {
+    const wasOpen = !menu.classList.contains('hidden');
+    closeAllMenus();
+    if (!wasOpen) {
+      menu.classList.remove('hidden');
+      button.classList.add('open');
+      button.setAttribute('aria-expanded', 'true');
+    }
+    return;
+  }
+
+  if (!inv) return;
+
+  if (act === 'pdf') {
+    button.textContent = 'Drawing…';
+    try {
+      await downloadInvoice(inv);
+      button.textContent = 'Download PDF';
+    } catch (problem) {
+      button.textContent = 'Download PDF';
+      menuError(menu, 'The PDF didn\'t draw: ' + (problem && problem.message ? problem.message : problem));
+    }
+    return;
+  }
+
+  if (act === 'edit') {
+    startEditInvoice(inv);
+    return;
+  }
+
+  if (act === 'status') {
+    const value = button.dataset.value;
+    if (inv.status === value) { closeAllMenus(); return; }
+
+    button.textContent = '…';
+    const patch = { status: value };
+    if (value === 'sent' && !inv.sent_on) patch.sent_on = todayISO();
+    if (value === 'paid') patch.paid_on = todayISO();
+
+    const problem = await changeInvoice(id, patch);
+    if (problem) {
+      button.textContent = titleCase(value);
+      menuError(menu, problem);
+      return;
+    }
+
+    // Marking an invoice paid marks the jobs on it paid too, so the
+    // schedule and the invoice list can't tell you different things.
+    let alsoDone = 0;
+    if (value === 'paid') alsoDone = await markShootsPaid(inv);
+
+    flash(inv.number + ' is now ' + value + '.'
+      + (alsoDone ? ` ${alsoDone} ${alsoDone === 1 ? 'shoot' : 'shoots'} marked paid as well.` : ''));
+    refresh();
+    return;
+  }
+
+  if (act === 'delete') {
+    if (button.dataset.armed !== '1') {
+      button.dataset.armed = '1';
+      button.classList.add('armed');
+      button.textContent = 'Tap again to delete';
+      setTimeout(() => {
+        button.dataset.armed = '';
+        button.classList.remove('armed');
+        button.textContent = 'Delete';
+      }, 5000);
+      return;
+    }
+
+    button.textContent = 'Deleting…';
+    const { data, error } = await supabase
+      .from('invoices').delete().eq('id', id).select('id');
+
+    if (error || !data || !data.length) {
+      button.dataset.armed = '';
+      button.classList.remove('armed');
+      button.textContent = 'Delete';
+      menuError(menu, error ? error.message : 'The database refused that.');
+      return;
+    }
+
+    if (editingInvoice && String(editingInvoice.id) === String(id)) closeInvoiceForm();
+    flash(inv.number + ' has gone. The jobs on it are free to invoice again.');
+    refresh();
+  }
+});
+
+async function changeInvoice(id, patch) {
+  const { data, error } = await supabase
+    .from('invoices').update(patch).eq('id', id).select('id');
+
+  if (error) return error.message;
+  if (!data || !data.length) {
+    return 'Nothing changed — the database refused it. That usually means this account isn\'t set up to invoice.';
+  }
+  return null;
+}
+
+// Best effort. If a shoot won't update, the invoice is still paid — the
+// count in the message just comes back smaller.
+async function markShootsPaid(inv) {
+  const ids = (inv.shoot_ids || []).map(String);
+  if (!ids.length) return 0;
+
+  const { data } = await supabase
+    .from('shoots').update({ status: 'paid' }).in('id', ids).select('id');
+
+  return data ? data.length : 0;
+}
+
+// ---- the invoice form ----
+
+function nextSeq() {
+  return invoices.reduce((top, i) => Math.max(top, Number(i.seq || 0)), 0) + 1;
+}
+
+function numberFor(seq) {
+  return ME.prefix + String(seq).padStart(3, '0');
+}
+
+// Pull the digits back out of whatever's typed, so you can override the
+// number by hand and the ordering still makes sense.
+function seqFromNumber(text, fallback) {
+  const m = String(text).match(/(\d+)\s*$/);
+  return m ? Number(m[1]) : fallback;
+}
+
+function buildClientList() {
+  const names = Array.from(new Set(
+    allShoots.map((s) => (s.client || '').trim()).filter(Boolean)
+  )).sort();
+
+  el('clientnames').innerHTML = names
+    .map((n) => `<option value="${escapeAttr(n)}"></option>`).join('');
+}
+
+// Every shoot already sitting on some invoice. Those don't get offered
+// again, which is what stops a job being billed twice.
+function billedShootIds() {
+  const set = new Set();
+  invoices.forEach((inv) => {
+    if (editingInvoice && String(inv.id) === String(editingInvoice.id)) return;
+    (inv.shoot_ids || []).forEach((id) => set.add(String(id)));
+  });
+  return set;
+}
+
+function attachedIds() {
+  return Array.from(document.querySelectorAll('#lines .lineitem[data-shoot]'))
+    .map((n) => n.dataset.shoot);
+}
+
+function renderPicker() {
+  const name = el('f_i_client').value.trim().toLowerCase();
+
+  if (!name) {
+    hide('pickwrap');
+    el('pickshoots').innerHTML = '';
+    return;
+  }
+
+  const billed = billedShootIds();
+  const attached = new Set(attachedIds());
+
+  const rows = allShoots
+    .filter((s) => (s.client || '').trim().toLowerCase() === name)
+    .filter((s) => !billed.has(String(s.id)))
+    .sort(byDateAscending)
+    .reverse();
+
+  show('pickwrap');
+
+  if (!rows.length) {
+    el('pickshoots').innerHTML = '<div class="pm" style="padding:6px 0">No uninvoiced jobs under that name. Add lines by hand below.</div>';
+    return;
+  }
+
+  el('pickshoots').innerHTML = rows.map((s) => {
+    const fee = feeInfo(s).headline;
+    return `
+      <label class="pickrow">
+        <input type="checkbox" data-shoot="${escapeAttr(s.id)}"${attached.has(String(s.id)) ? ' checked' : ''}>
+        <span>
+          ${escapeText(s.venue)}
+          <span class="pm">${longDate(s.shoot_date)} &middot; ${escapeText(s.job_type)} &middot; ${escapeText(s.status)}</span>
+        </span>
+        <span class="pf">${fee == null ? '—' : money(fee)}</span>
+      </label>`;
+  }).join('');
+}
+
+// Ticking a job puts a line on the invoice. Unticking takes it off again.
+// Nothing to press, and the two can't drift apart.
+el('pickshoots').addEventListener('change', (event) => {
+  const box = event.target.closest('input[data-shoot]');
+  if (!box) return;
+
+  const id = box.dataset.shoot;
+  const existing = document.querySelector(`#lines .lineitem[data-shoot="${CSS.escape(id)}"]`);
+
+  if (!box.checked) {
+    if (existing) existing.remove();
+    updateLineTotal();
+    return;
+  }
+  if (existing) return;
+
+  const shoot = allShoots.find((s) => String(s.id) === String(id));
+  if (!shoot) return;
+
+  addLine({
+    d: `${titleCase(shoot.job_type || 'Shoot')} — ${shoot.venue}, ${dotDate(shoot.shoot_date)}`,
+    q: 1,
+    u: feeInfo(shoot).headline == null ? '' : feeInfo(shoot).headline
+  }, shoot.id);
+});
+
+el('f_i_client').addEventListener('input', () => {
+  renderPicker();
+  prefillBillTo();
+});
+
+// The last invoice to the same client already has their address on it.
+// Only fills boxes you haven't touched.
+function prefillBillTo() {
+  const name = el('f_i_client').value.trim().toLowerCase();
+  if (!name) return;
+
+  const last = invoices.find((i) => (i.client || '').trim().toLowerCase() === name);
+  if (!last) return;
+
+  const pairs = [
+    ['f_i_contact', last.bill_contact],
+    ['f_i_company', last.bill_company],
+    ['f_i_address', last.bill_address],
+    ['f_i_phone',   last.bill_phone],
+    ['f_i_email',   last.bill_email]
+  ];
+  pairs.forEach(([id, value]) => {
+    if (!el(id).value.trim() && value) el(id).value = value;
+  });
+}
+
+function lineHTML(line) {
+  return `
+      <div class="linelabel">Description</div>
+      <input type="text" class="ldesc" autocomplete="off" value="${escapeAttr(line.d || '')}">
+      <div class="lrow">
+        <div>
+          <div class="linelabel">Qty</div>
+          <input type="number" class="lqty" min="0" step="0.5" inputmode="decimal" value="${line.q == null ? 1 : escapeAttr(line.q)}">
+        </div>
+        <div>
+          <div class="linelabel">Unit price &pound;</div>
+          <input type="number" class="lunit" min="0" step="0.01" inputmode="decimal" value="${line.u == null || line.u === '' ? '' : escapeAttr(line.u)}">
+        </div>
+        <div class="drop">
+          <div class="linelabel">&nbsp;</div>
+          <button type="button" class="quiet lremove" aria-label="Remove this line">&times;</button>
+        </div>
+      </div>`;
+}
+
+function addLine(line, shootId) {
+  const node = document.createElement('div');
+  node.className = 'lineitem';
+  if (shootId != null) node.dataset.shoot = String(shootId);
+  node.innerHTML = lineHTML(line || {});
+  el('lines').appendChild(node);
+  updateLineTotal();
+}
+
+// Each line carries the shoot it came from, if it came from one. Keeping
+// that on the line rather than in a list beside it is what stops the two
+// falling out of step when an invoice mixes picked jobs with typed ones.
+function readLines() {
+  return Array.from(document.querySelectorAll('#lines .lineitem')).map((n) => ({
+    d: n.querySelector('.ldesc').value.trim(),
+    q: Number(n.querySelector('.lqty').value || 0),
+    u: Number(n.querySelector('.lunit').value || 0),
+    s: n.dataset.shoot || null
+  }));
+}
+
+function updateLineTotal() {
+  const total = readLines().reduce((t, l) => t + l.q * l.u, 0);
+  el('linetotal').textContent = money2(total);
+}
+
+el('lines').addEventListener('input', updateLineTotal);
+
+el('lines').addEventListener('click', (event) => {
+  const button = event.target.closest('.lremove');
+  if (!button) return;
+  button.closest('.lineitem').remove();
+  updateLineTotal();
+  renderPicker();
+});
+
+el('addline').addEventListener('click', () => addLine({ q: 1 }));
+
+function openInvoiceForm() {
+  editingInvoice = null;
+  closeAllMenus();
+  hide('inverror');
+  hide('flash');
+
+  el('newinvoice').reset();
+  el('lines').innerHTML = '';
+  el('f_i_number').value = numberFor(nextSeq());
+  el('f_i_date').value = todayISO();
+  el('f_i_terms').value = 7;
+  renderPicker();
+  addLine({ q: 1 });
+
+  el('invtitle').textContent = 'Make an invoice';
+  el('saveinvoice').textContent = 'Save and download PDF';
+  show('newinvoice');
+  hide('openinvoice');
+  el('f_i_client').focus();
+}
+
+function startEditInvoice(inv) {
+  editingInvoice = inv;
+  closeAllMenus();
+  hide('inverror');
+  hide('flash');
+
+  el('newinvoice').reset();
+  el('f_i_number').value = inv.number;
+  el('f_i_date').value = inv.issued_on;
+  el('f_i_terms').value = inv.terms_days == null ? 7 : inv.terms_days;
+  el('f_i_client').value = inv.client || '';
+  el('f_i_contact').value = inv.bill_contact || '';
+  el('f_i_company').value = inv.bill_company || '';
+  el('f_i_address').value = inv.bill_address || '';
+  el('f_i_phone').value = inv.bill_phone || '';
+  el('f_i_email').value = inv.bill_email || '';
+
+  // Lines that came from a shoot keep their link, so the picker shows
+  // them still ticked and can't offer them twice.
+  el('lines').innerHTML = '';
+  (inv.lines || []).forEach((line) => addLine(line, line.s || null));
+  if (!(inv.lines || []).length) addLine({ q: 1 });
+
+  renderPicker();
+
+  el('invtitle').textContent = 'Edit ' + inv.number;
+  el('saveinvoice').textContent = 'Save changes and download PDF';
+  show('newinvoice');
+  hide('openinvoice');
+  el('newinvoice').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function closeInvoiceForm() {
+  editingInvoice = null;
+  hide('newinvoice');
+  show('openinvoice');
+}
+
+el('openinvoice').addEventListener('click', openInvoiceForm);
+el('cancelinvoice').addEventListener('click', closeInvoiceForm);
+
+el('newinvoice').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  hide('inverror');
+
+  const number = el('f_i_number').value.trim();
+  const issued = el('f_i_date').value;
+  const terms  = Number(el('f_i_terms').value || 0);
+  const lines  = readLines().filter((l) => l.d !== '' || l.u);
+
+  if (!number || !issued) {
+    el('inverror').textContent = 'An invoice number and an issue date are needed before this can be saved.';
+    show('inverror');
+    return;
+  }
+  if (!lines.length) {
+    el('inverror').textContent = 'An invoice with no lines on it isn\'t an invoice. Tick a job above or fill in a line by hand.';
+    show('inverror');
+    return;
+  }
+
+  // Only the lines that survived keep their shoot links, so a line deleted
+  // by hand doesn't leave a job stuck marked as billed.
+  const shootIds = lines.map((l) => l.s).filter(Boolean);
+
+  const row = {
+    seq:        seqFromNumber(number, editingInvoice ? editingInvoice.seq : nextSeq()),
+    number:     number,
+    issued_on:  issued,
+    due_on:     addDays(issued, terms),
+    terms_days: terms,
+    client:       el('f_i_client').value.trim() || null,
+    bill_contact: el('f_i_contact').value.trim() || null,
+    bill_company: el('f_i_company').value.trim() || null,
+    bill_address: el('f_i_address').value.trim() || null,
+    bill_phone:   el('f_i_phone').value.trim() || null,
+    bill_email:   el('f_i_email').value.trim() || null,
+    lines:      lines,
+    total:      lines.reduce((t, l) => t + l.q * l.u, 0),
+    shoot_ids:  shootIds
+  };
+
+  el('saveinvoice').disabled = true;
+  el('saveinvoice').textContent = 'Saving…';
+
+  let saved = null;
+  let problem = null;
+
+  if (editingInvoice) {
+    const { data, error } = await supabase
+      .from('invoices').update(row).eq('id', editingInvoice.id).select('*');
+    problem = error ? error.message : (!data || !data.length ? 'The database refused that.' : null);
+    if (data && data.length) saved = data[0];
+  } else {
+    row.team_id = teamId;
+    row.status = 'draft';
+    const { data, error } = await supabase.from('invoices').insert(row).select('*');
+    problem = error
+      ? error.message + (error.code === '23505' ? ' — that invoice number is already used.' : '')
+      : null;
+    if (data && data.length) saved = data[0];
+  }
+
+  el('saveinvoice').disabled = false;
+  el('saveinvoice').textContent = editingInvoice ? 'Save changes and download PDF' : 'Save and download PDF';
+
+  if (problem) {
+    el('inverror').textContent = problem;
+    show('inverror');
+    return;
+  }
+
+  const wasEdit = !!editingInvoice;
+  closeInvoiceForm();
+  await refresh();
+
+  try {
+    await downloadInvoice(saved);
+    flash(saved.number + (wasEdit ? ' updated' : ' saved as a draft')
+      + ' and the PDF has downloaded. Mark it sent once it\'s gone out.');
+  } catch (trouble) {
+    flash(saved.number + ' saved, but the PDF didn\'t draw: '
+      + (trouble && trouble.message ? trouble.message : trouble)
+      + ' Try Download PDF from the row menu.');
+  }
+});
+
+// ============================================================
+// The PDF
+//
+// Drawn here rather than filled into your spreadsheet, because nothing in
+// a browser can open an .xlsx, fill it and print it to PDF. The layout
+// below follows the template: logo top left, INVOICE top right, the two
+// address blocks, the four-column table, then payment details.
+//
+// The colours are read off styles.css at the moment of drawing, so
+// recolouring the app recolours the invoices with it.
+// ============================================================
+
+// Fetched the first time you ask for a PDF, not on load, so the app opens
+// as fast as it always did. Pinned to a version on purpose: version 2
+// mangles the pound sign, which on a British invoice is not a small thing.
+let pdfLibrary = null;
+function loadPdfLibrary() {
+  if (!pdfLibrary) {
+    pdfLibrary = import('https://cdn.jsdelivr.net/npm/jspdf@3.0.1/+esm')
+      .then((mod) => mod.jsPDF || (mod.default && mod.default.jsPDF) || mod.default);
+  }
+  return pdfLibrary;
+}
+
+// logo.png sits next to index.html. If it isn't there the invoice still
+// draws, with the company name set in type where the mark would go.
+let logoData = null;
+function loadLogo() {
+  if (!logoData) {
+    logoData = fetch('logo.png')
+      .then((response) => (response.ok ? response.blob() : Promise.reject(new Error('missing'))))
+      .then((blob) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      }))
+      .catch(() => null);
+  }
+  return logoData;
+}
+
+function safeFilename(text) {
+  return String(text).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
+}
+
+async function downloadInvoice(inv) {
+  const doc = await drawInvoice(inv);
+  const name = [inv.number, inv.client].filter(Boolean).join(' — ');
+  doc.save(safeFilename(name) + '.pdf');
+}
+
+async function drawInvoice(inv) {
+  const JsPDF = await loadPdfLibrary();
+  const logo = await loadLogo();
+
+  const doc = new JsPDF({ unit: 'mm', format: 'a4', compress: true });
+
+  const ink   = tokenValue('--ink')  || '#303030';
+  const soft  = tokenValue('--ink2') || '#545763';
+  const hair  = tokenValue('--rule') || '#808080';
+  const good  = tokenValue('--paid') || '#4A7A42';
+  const bars  = [1, 2, 3, 4, 5, 6].map((n) => tokenValue('--accent-' + n));
+
+  const L = 18;          // left margin
+  const R = 192;         // right margin
+  const QTY  = 122;      // right edge of the qty column
+  const UNIT = 155;      // right edge of the unit price column
+
+  const label = (text, x, y, align) => {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(soft);
+    doc.setCharSpace(0.6);
+    doc.text(text.toUpperCase(), x, y, align ? { align: align } : undefined);
+    doc.setCharSpace(0);
+  };
+
+  const body = (size, weight, colour) => {
+    doc.setFont('helvetica', weight || 'normal');
+    doc.setFontSize(size || 9.5);
+    doc.setTextColor(colour || ink);
+  };
+
+  const rule = (x1, y, x2, weight, colour) => {
+    doc.setDrawColor(colour || hair);
+    doc.setLineWidth(weight || 0.2);
+    doc.line(x1, y, x2, y);
+  };
+
+  // ---- header ----
+  if (logo) {
+    doc.addImage(logo, 'PNG', L, 15, 50, 25);
+  } else {
+    body(20, 'bold');
+    doc.text(ME.company.toUpperCase(), L, 30);
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(26);
+  doc.setTextColor(ink);
+  doc.setCharSpace(1.2);
+  doc.text('INVOICE', R, 27, { align: 'right' });
+  doc.setCharSpace(0);
+
+  body(9.5);
+  doc.text(dotDate(inv.issued_on), R, 35, { align: 'right' });
+  doc.text(inv.number, R, 40.5, { align: 'right' });
+
+  body(8, 'normal', soft);
+  doc.text(
+    `Payment terms — due within ${inv.terms_days == null ? 7 : inv.terms_days} days of receipt`,
+    R, 49, { align: 'right' }
+  );
+
+  // The six-bar rule off the front of the app. Delete these three lines
+  // if you'd rather the invoice didn't carry it.
+  const barWidth = (R - L) / bars.length;
+  bars.forEach((colour, i) => {
+    doc.setFillColor(colour);
+    doc.rect(L + i * barWidth, 55, barWidth + 0.2, 1.6, 'F');
+  });
+
+  // ---- the two address blocks ----
+  const MID = 108;
+  label('Invoice to', L, 66);
+  label('Invoice from', MID, 66);
+  rule(L, 68.5, MID - 6);
+  rule(MID, 68.5, R);
+
+  const block = (lines, x, top) => {
+    let y = top;
+    lines.filter(Boolean).forEach((text, i) => {
+      body(9.5, i === 0 ? 'bold' : 'normal');
+      doc.splitTextToSize(String(text), (x === L ? MID - 6 : R) - x).forEach((piece) => {
+        doc.text(piece, x, y);
+        y += 4.8;
+      });
+    });
+    return y;
+  };
+
+  const leftEnd = block(
+    [inv.bill_contact, inv.bill_company, inv.bill_address, inv.bill_phone, inv.bill_email],
+    L, 75
+  );
+  const rightEnd = block(
+    [ME.name, ME.company, ME.address, ME.phone, ME.email],
+    MID, 75
+  );
+
+  // ---- the table ----
+  let y = Math.max(leftEnd, rightEnd, 104) + 8;
+
+  rule(L, y, R, 0.4, ink);
+  y += 5.5;
+  label('Description', L, y);
+  label('Qty', QTY, y, 'right');
+  label('Unit price', UNIT, y, 'right');
+  label('Total', R, y, 'right');
+  y += 3;
+  rule(L, y, R, 0.4, ink);
+  y += 7;
+
+  (inv.lines || []).forEach((line) => {
+    const pieces = doc.splitTextToSize(String(line.d || ''), 96);
+
+    // A page break mid-invoice is rare but not impossible.
+    if (y + pieces.length * 4.6 > 250) {
+      doc.addPage();
+      y = 25;
+    }
+
+    body(9.5);
+    pieces.forEach((piece, i) => doc.text(piece, L, y + i * 4.6));
+    doc.text(String(line.q == null ? 1 : line.q), QTY, y, { align: 'right' });
+    doc.text(money2(line.u), UNIT, y, { align: 'right' });
+    doc.text(money2(Number(line.q || 0) * Number(line.u || 0)), R, y, { align: 'right' });
+
+    y += Math.max(1, pieces.length) * 4.6 + 3;
+    rule(L, y - 3.4, R);
+  });
+
+  // ---- the totals, and the bank details level with them ----
+  const footTop = y + 5;
+
+  y = footTop;
+  body(9.5, 'normal', soft);
+  doc.text('Subtotal', UNIT, y, { align: 'right' });
+  body(9.5);
+  doc.text(money2(inv.total), R, y, { align: 'right' });
+
+  y += 4;
+  rule(UNIT - 32, y, R, 0.4, ink);
+  y += 7;
+
+  body(11, 'bold');
+  doc.text('Balance due', UNIT, y, { align: 'right' });
+  doc.text(money2(inv.status === 'paid' ? 0 : inv.total), R, y, { align: 'right' });
+
+  if (inv.status === 'paid') {
+    y += 7;
+    body(9, 'bold', good);
+    doc.text('PAID ' + dotDate(inv.paid_on || inv.issued_on), R, y, { align: 'right' });
+  }
+
+  // ---- payment details ----
+  let py = footTop;
+  label('Payment details', L, py);
+  py += 6;
+  body(9.5);
+  ME.bank.forEach((text) => {
+    doc.text(text, L, py);
+    py += 4.8;
+  });
+
+  // ---- footer ----
+  rule(L, 278, R);
+  body(7.5, 'normal', soft);
+  doc.text([ME.company, ME.email, ME.phone].join('   ·   '), L, 283);
+  doc.text(inv.number, R, 283, { align: 'right' });
+
+  return doc;
+}
+
 // ---- auth ----
 
 el('login').addEventListener('submit', async (event) => {
@@ -1038,6 +1994,7 @@ async function render(session) {
     started = false;
     hide('app');
     hide('tabs');
+    closeMoreMenu();
     show('login');
     return;
   }

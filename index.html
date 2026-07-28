@@ -162,7 +162,96 @@
 
     </section>
 
-    <!-- ============ MORE ============ -->
+    <!-- ============ INVOICES ============ -->
+    <!-- Hidden from anyone whose profile doesn't have can_invoice ticked.
+         Hiding it is only tidiness — the database is what actually
+         refuses, so an empty screen is the worst anyone else could get. -->
+    <section id="screen-invoices" class="screen hidden">
+
+      <div class="tally">
+        <div>
+          <div class="label">Sent</div>
+          <div class="fig" id="i_sent">&mdash;</div>
+          <div class="sub" id="i_sent_sub"></div>
+        </div>
+        <div>
+          <div class="label">Paid</div>
+          <div class="fig" id="i_paid">&mdash;</div>
+          <div class="sub" id="i_paid_sub"></div>
+        </div>
+        <div>
+          <div class="label">To chase</div>
+          <div class="fig" id="i_chase">&mdash;</div>
+          <div class="sub" id="i_chase_sub"></div>
+        </div>
+      </div>
+
+      <button id="openinvoice">Make an invoice</button>
+
+      <form id="newinvoice" class="hidden">
+        <div class="formtitle" id="invtitle">Make an invoice</div>
+        <div id="inverror" class="error hidden"></div>
+
+        <div class="pair">
+          <div>
+            <div class="label">Invoice no.</div>
+            <input type="text" id="f_i_number" autocomplete="off" required>
+          </div>
+          <div>
+            <div class="label">Issued</div>
+            <input type="date" id="f_i_date" required>
+          </div>
+        </div>
+
+        <div class="label">Client</div>
+        <input type="text" id="f_i_client" list="clientnames" autocomplete="off"
+               placeholder="Who's paying">
+        <datalist id="clientnames"></datalist>
+
+        <div class="label">Days to pay</div>
+        <input type="number" id="f_i_terms" min="0" step="1" inputmode="numeric" value="7">
+
+        <div id="pickwrap" class="pick hidden">
+          <div class="label">Jobs for this client, not yet invoiced</div>
+          <div id="pickshoots"></div>
+        </div>
+
+        <div class="label gap">Invoice to</div>
+        <input type="text" id="f_i_contact" autocomplete="off" placeholder="Name or department">
+        <input type="text" id="f_i_company" autocomplete="off" placeholder="Company">
+        <input type="text" id="f_i_address" autocomplete="off" placeholder="Address">
+        <div class="pair">
+          <div><input type="text" id="f_i_phone" autocomplete="off" placeholder="Phone"></div>
+          <div><input type="email" id="f_i_email" autocomplete="off" placeholder="Email"></div>
+        </div>
+
+        <div class="label gap">Lines</div>
+        <div id="lines"></div>
+        <button type="button" class="quiet" id="addline">Add a line</button>
+
+        <div class="totalbar">
+          <span>Balance due</span>
+          <span id="linetotal">&pound;0.00</span>
+        </div>
+
+        <button type="submit" id="saveinvoice">Save and download PDF</button>
+        <div style="height:8px"></div>
+        <button type="button" class="quiet" id="cancelinvoice">Cancel</button>
+        <div style="height:10px"></div>
+      </form>
+
+      <div class="chips" id="invchips"></div>
+
+      <div class="listhead">
+        <span class="label" id="invlabel" style="margin:0">Everything</span>
+        <span class="count" id="invcount"></span>
+      </div>
+
+      <div id="invlist"></div>
+
+    </section>
+
+    <!-- ============ ACCOUNT ============ -->
     <section id="screen-more" class="screen hidden">
 
       <div class="label">Signed in as</div>
@@ -174,14 +263,40 @@
       <div class="spacer"></div>
 
       <div class="label">Later</div>
-      <p style="color:var(--ink2)">Kit lists, clients and invoicing will live on this screen. Nothing is listed until it's built &mdash; a menu of things that don't work is worse than a short menu.</p>
+      <p style="color:var(--ink2)">Kit lists and client contacts will live behind the More menu. Nothing is listed until it's built &mdash; a menu of things that don't work is worse than a short menu.</p>
 
     </section>
 
   </div>
 </main>
 
+<!-- Invisible click-catcher. Tapping anywhere closes the More menu. -->
+<div id="scrim" class="scrim hidden"></div>
+
 <nav id="tabs" class="tabbar hidden">
+
+  <!-- The More menu. Sits above the bar, right edge lined up with it. -->
+  <div id="moremenu" class="moremenu hidden">
+    <div class="mmwrap">
+
+      <button type="button" class="mi hidden" id="mi_invoices" data-go="invoices">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9.5 12h6M9.5 16h4"/></svg>
+        <span>Invoices</span>
+      </button>
+
+      <button type="button" class="mi" data-go="more">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 20c0-3.4 2.9-5.5 6.5-5.5s6.5 2.1 6.5 5.5"/></svg>
+        <span>Account</span>
+      </button>
+
+      <button type="button" class="mi" data-go="signout">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4H6v16h8"/><path d="M11 12h9M17 8.5l3.5 3.5L17 15.5"/></svg>
+        <span>Sign out</span>
+      </button>
+
+    </div>
+  </div>
+
   <div class="tabinner">
 
     <button type="button" class="tab on" data-tab="home">
@@ -204,7 +319,7 @@
       <span>Add</span>
     </button>
 
-    <button type="button" class="tab" data-tab="more">
+    <button type="button" class="tab" data-tab="more" id="moretab" aria-haspopup="true" aria-expanded="false">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>
       <span>More</span>
     </button>
