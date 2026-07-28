@@ -347,6 +347,26 @@ table.sheet tfoot .sums.big td {
 }
 .pill.paid { border-color: var(--rule); color: var(--ink2); }
 
+/* The same pill, as a button you can press. It has to undo the sitewide
+   button styling, which is built for the big full-width ones. */
+button.pill {
+  width: auto; display: inline-block; border-radius: 0;
+  background: none; color: var(--stamp);
+  border: 1px solid var(--stamp); padding: 2px 6px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em;
+  text-transform: uppercase; cursor: pointer;
+}
+button.pill.paid { border-color: var(--rule); color: var(--ink2); }
+button.pill:hover { background: var(--paper); }
+
+/* The dropdown that takes the pill's place while you're choosing. */
+select.stpick {
+  width: auto; max-width: 170px; margin: 0; padding: 2px 4px;
+  font-family: var(--mono); font-size: 11px;
+  background: var(--card); color: var(--ink);
+  border: 1px solid var(--ink);
+}
+
 #doublecheck { margin-top: 16px; }
 
 /* The one-tap suggestions sit tight to their button. */

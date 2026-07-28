@@ -2045,6 +2045,7 @@ function invoiceAsRow(inv) {
     key:         'inv:' + inv.id,
     id:          inv.id,
     kind:        'invoice',
+    status:      inv.status,
     date:        (inv.status === 'paid' && inv.paid_on) ? inv.paid_on : inv.issued_on,
     direction:   'in',
     amount:      Number(inv.total || 0),
@@ -2062,6 +2063,7 @@ function entryAsRow(entry) {
     key:         'ent:' + entry.id,
     id:          entry.id,
     kind:        'entry',
+    status:      entry.status,
     date:        entry.entry_date,
     direction:   entry.direction,
     amount:      Number(entry.amount || 0),
@@ -2362,7 +2364,11 @@ function renderMoneyList() {
         <td class="num out">${isIn ? '' : money2(r.amount)}</td>
         <td class="num">${r.miles == null ? '' : Math.round(r.miles)}</td>
         <td class="ds">${escapeText([r.ref, r.description].filter(Boolean).join(' — '))}</td>
-        <td class="st"><span class="pill${r.settled ? ' paid' : ''}">${escapeText(statusWord(r))}</span></td>
+        <td class="st"><button type="button" class="pill${r.settled ? ' paid' : ''}"
+              data-st="1" data-kind="${r.kind}" data-id="${escapeAttr(r.id)}"
+              data-now="${escapeAttr(r.status || '')}" data-dir="${r.direction}"
+              aria-label="Status ${escapeAttr(statusWord(r))}. Tap to change it."
+              >${escapeText(statusWord(r))}</button></td>
       </tr>`;
     }).join('');
   }).join('');
@@ -2402,17 +2408,143 @@ function renderMoneyList() {
     </div>`;
 }
 
-// Tapping a line opens it. An invoice line can't be edited here — the
-// invoice is the original and this is a view of it — so it says so
-// rather than opening a form that would write to the wrong place.
+// ---- changing a status from the sheet itself ----
+//
+// The words in the column don't change. What changes is that they're now
+// a button, and tapping one offers the other words that line could say.
+// Nothing new is stored: an entry's choice writes to that entry, and an
+// invoice's choice writes to that invoice — the same field the Invoices
+// screen writes to. So the sheet and the invoice can't drift apart,
+// because there's still only one copy of the answer.
+//
+// An entry has two states. An invoice has three, because a draft hasn't
+// left the building yet and that's worth being able to say from here.
+function statusChoices(kind, direction) {
+  if (kind === 'invoice') {
+    return [
+      ['draft', 'Draft'],
+      ['sent',  'Invoice pending'],
+      ['paid',  'Paid']
+    ];
+  }
+  return [
+    ['pending', direction === 'in' ? 'Invoice pending' : 'To be paid'],
+    ['settled', 'Paid']
+  ];
+}
+
+// A plain dropdown rather than a menu of our own, so on a phone you get
+// the proper native picker instead of something fiddly inside a table
+// that already scrolls sideways.
+function openStatusPicker(pill) {
+  const cell = pill.parentNode;
+  if (cell.querySelector('select.stpick')) return;
+
+  const kind = pill.dataset.kind;
+  const now  = pill.dataset.now;
+
+  const pick = document.createElement('select');
+  pick.className = 'stpick';
+  pick.innerHTML = statusChoices(kind, pill.dataset.dir)
+    .map(([value, word]) =>
+      `<option value="${value}"${value === now ? ' selected' : ''}>${word}</option>`)
+    .join('');
+
+  pill.classList.add('hidden');
+  cell.appendChild(pick);
+
+  let chosen = false;
+  const putBack = () => {
+    if (chosen) return;
+    pick.remove();
+    pill.classList.remove('hidden');
+  };
+
+  pick.addEventListener('change', async () => {
+    const value = pick.value;
+    if (value === now) { putBack(); return; }
+
+    chosen = true;
+    pick.disabled = true;
+
+    const problem = await applyStatus(kind, pill.dataset.id, value);
+
+    // A win redraws the whole sheet, so there's nothing to put back.
+    // A refusal leaves the old word where it was and says why.
+    if (problem) {
+      chosen = false;
+      pick.disabled = false;
+      putBack();
+      flash(problem);
+    }
+  });
+
+  // Tapping away without choosing just closes it again. The delay is
+  // there because some phones blur the dropdown a moment before they
+  // tell us what was picked.
+  pick.addEventListener('focusout', () => setTimeout(putBack, 200));
+
+  pick.focus();
+  if (typeof pick.showPicker === 'function') {
+    try { pick.showPicker(); } catch (ignored) { /* older browsers */ }
+  }
+}
+
+// Returns null if it went through, or the reason it didn't.
+async function applyStatus(kind, id, value) {
+  if (kind === 'entry') {
+    const problem = await changeEntry(id, { status: value });
+    if (problem) return problem;
+
+    flash(value === 'settled' ? 'Marked paid.' : 'Put back to not paid yet.');
+    refresh();
+    return null;
+  }
+
+  const inv = findInvoice(id);
+  if (!inv) return 'That invoice isn\'t there any more. Pull the screen down to reload.';
+
+  // Same patch the Invoices screen builds, for the same reasons: sent
+  // and paid want dating, and an invoice that's been pulled back off
+  // paid shouldn't keep a payment date it no longer has.
+  const patch = { status: value };
+  if (value === 'sent' && !inv.sent_on) patch.sent_on = todayISO();
+  if (value === 'paid') patch.paid_on = todayISO();
+  if (value !== 'paid' && inv.paid_on) patch.paid_on = null;
+
+  const problem = await changeInvoice(id, patch);
+  if (problem) return problem;
+
+  // Marking an invoice paid marks the jobs on it paid too, so the
+  // schedule and the sheet can't tell you different things.
+  let alsoDone = 0;
+  if (value === 'paid') alsoDone = await markShootsPaid(inv);
+
+  flash(inv.number + ' is now ' + value + '.'
+    + (alsoDone ? ` ${alsoDone} ${alsoDone === 1 ? 'shoot' : 'shoots'} marked paid as well.` : ''));
+  refresh();
+  return null;
+}
+
+// Tapping a line opens it. An invoice line's figures can't be edited here
+// — the invoice is the original and this is a view of it — so it says so
+// rather than opening a form that would write to the wrong place. The
+// status is the exception, and that's the pill, handled above.
 el('molist').addEventListener('click', (event) => {
+  const pill = event.target.closest('button[data-st]');
+  if (pill) {
+    openStatusPicker(pill);
+    return;
+  }
+
   const line = event.target.closest('tr[data-id]');
   if (!line) return;
 
   if (line.dataset.kind === 'invoice') {
     const inv = findInvoice(line.dataset.id);
     flash((inv ? inv.number : 'That line') + ' comes from an invoice. '
-      + 'Edit it, or mark it paid, on the Invoices screen and this line follows.');
+      + 'Tap its status to change that here — for the figures or the lines, '
+      + 'edit it on the Invoices screen and this line follows.');
     return;
   }
 
