@@ -4,10 +4,10 @@
 :root {
   --paper: #E7E8E1;
   --card:  #F2F2ED;
-  --ink:   #1B1D19;
-  --ink2:  #55584F;
-  --ink3:  #8A8D82;
-  --rule:  #C9CBC0;
+  --ink:   #FDDCA9;
+  --ink2:  #FEA712;
+  --ink3:  #E76219;
+  --rule:  #C21717;
   --stamp: #A83A2B;
   --mono:  ui-monospace, Menlo, Consolas, monospace;
 }
