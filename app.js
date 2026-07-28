@@ -56,7 +56,7 @@ const ME = {
   company: 'BGL Media',
   address: '4, Bodmin Ave, Southport, PR9 9TU',
   phone:   '+44 7585 430643',
-  email:   'ben@bglmedia.co.uk',
+  email:   'benlaw@bglmedia.uk',
 
   // Invoice numbers are this, then three digits: BGLM001, BGLM002...
   prefix:  'BGLM',
@@ -1738,25 +1738,116 @@ el('newinvoice').addEventListener('submit', async (event) => {
 // ============================================================
 // The PDF
 //
-// Drawn here rather than filled into your spreadsheet, because nothing in
-// a browser can open an .xlsx, fill it and print it to PDF. The layout
-// below follows the template: logo top left, INVOICE top right, the two
-// address blocks, the four-column table, then payment details.
+// A redraw of your template, measured off the spreadsheet itself: same
+// grid, same greys, same Montserrat, same eleven ruled line rows.
 //
-// The colours are read off styles.css at the moment of drawing, so
-// recolouring the app recolours the invoices with it.
+// Nothing in here reads styles.css. The invoice is its own thing now, so
+// recolouring the app leaves it alone — which is the way round it should
+// have been from the start.
 // ============================================================
 
+// Points to millimetres. Every row height in the template is in points.
+const PT = 25.4 / 72;
+
+// The template's colours, straight out of the spreadsheet's cells.
+const T = {
+  band:  '#666666',   // the bar top and bottom, and the table header
+  panel: '#F3F3F3',   // behind the logo, and every other line row
+  navy:  '#1F3864',   // INVOICE TO / FROM, the date and the number
+  slate: '#333F4F',   // payment terms, SUBTOTAL, Balance Due
+  grey:  '#434343',   // Payment Details and the bank lines
+  word:  '#7F7F7F',   // the word INVOICE
+  cell:  '#999999',   // the box around the table
+  thin:  '#BFBFBF',   // the underlines
+  due:   '#B7B7B7',   // the block behind the balance
+  black: '#000000',
+  white: '#FFFFFF'
+};
+
+// The column grid, in millimetres across an A4 page. These come from
+// measuring the template's own column widths, then centring the result.
+const S = {
+  sheetL: 11.65, sheetR: 198.35,
+  tableL: 18.52,     // where the ruled box starts
+  colC:   38.96,     // Payment Details sits here
+  descR: 102.84,     // description | qty
+  qtyR:  129.51,     // qty | unit price
+  unitR: 162.53,     // unit price | total
+  tableR: 191.74,    // where the ruled box ends
+  fromX: 102.84,     // the INVOICE FROM block
+  pad: 1.6           // how far text sits off a rule
+};
+
+// Where every row starts. The template is eleven line rows deep whether
+// you use them or not — that's part of how it looks — so a short invoice
+// still gets the full ruled box.
+function layout(lineCount) {
+  const rows = Math.max(11, lineCount);
+  const R18 = 18 * PT;
+
+  // Everything except the line rows, in points.
+  const fixed = (14.25 + 25.5 + 15.75 + 8 * 18 + 15.75 + 4.5 + 6 * 18
+                 + 4.5 + 18 + 22.5 + 33.75 + 9.75 + 9.75 + 15.75 + 15.75
+                 + 21 + 15.75) * PT;
+
+  const height = fixed + rows * R18;
+  let y = Math.max(10, (297 - height) / 2);
+
+  const at = { rowH: R18, rows: rows };
+
+  at.band1 = y;                 y += 14.25 * PT;
+  at.panel = y;
+  at.r2 = y;                    y += 25.5 * PT;
+  at.r3 = y;                    y += 15.75 * PT;
+  at.r4 = y;                    y += R18;
+  at.r5 = y;                    y += R18;   // INVOICE sits at the foot of this
+  at.r6 = y;                    y += R18;   // the date
+  at.r7 = y;                    y += R18;
+  at.r8 = y;                    y += R18;   // the number
+  at.r9 = y;                    y += R18;
+  at.panelEnd = y;
+  at.r10 = y;                   y += R18;
+  at.r11 = y;                   y += R18;   // payment terms
+  at.r12 = y;                   y += 15.75 * PT;
+  at.r12End = y;                y += 4.5 * PT;
+  at.details = y;               y += 6 * R18;
+                                y += 4.5 * PT;
+  at.head = y;                  y += R18;
+  at.headEnd = y;
+  at.body = y;                  y += rows * R18;
+  at.bodyEnd = y;
+  at.r33 = y;                   y += 22.5 * PT;
+  at.r33End = y;
+  at.r34 = y;                   y += 33.75 * PT;
+  at.r34End = y;
+                                y += (9.75 + 9.75 + 15.75 + 15.75 + 21 + 15.75) * PT;
+  at.band2 = y;                 y += 15.75 * PT;
+  at.end = y;
+
+  return at;
+}
+
+// The template prints unit prices bare and totals with the sign, so
+// they're two different formats and not an oversight.
+function bare(value) {
+  return Number(value || 0).toFixed(2);
+}
+
 // Fetched the first time you ask for a PDF, not on load, so the app opens
-// as fast as it always did. Pinned to a version on purpose: version 2
-// mangles the pound sign, which on a British invoice is not a small thing.
-let pdfLibrary = null;
-function loadPdfLibrary() {
-  if (!pdfLibrary) {
-    pdfLibrary = import('https://cdn.jsdelivr.net/npm/jspdf@3.0.1/+esm')
-      .then((mod) => mod.jsPDF || (mod.default && mod.default.jsPDF) || mod.default);
+// as fast as it always did. jsPDF is pinned to a version on purpose:
+// version 2 mangles the pound sign, which on a British invoice matters.
+let pdfKit = null;
+function loadPdfKit() {
+  if (!pdfKit) {
+    pdfKit = Promise.all([
+      import('https://cdn.jsdelivr.net/npm/jspdf@3.0.1/+esm'),
+      import('./fonts.js')
+    ]).then(([lib, fonts]) => ({
+      JsPDF: lib.jsPDF || (lib.default && lib.default.jsPDF) || lib.default,
+      fonts: fonts
+    }));
   }
-  return pdfLibrary;
+  return pdfKit;
 }
 
 // logo.png sits next to index.html. If it isn't there the invoice still
@@ -1783,179 +1874,183 @@ function safeFilename(text) {
 
 async function downloadInvoice(inv) {
   const doc = await drawInvoice(inv);
-  const name = [inv.number, inv.client].filter(Boolean).join(' — ');
+  const name = [inv.number, inv.client].filter(Boolean).join(' - ');
   doc.save(safeFilename(name) + '.pdf');
 }
 
 async function drawInvoice(inv) {
-  const JsPDF = await loadPdfLibrary();
+  const kit = await loadPdfKit();
   const logo = await loadLogo();
 
-  const doc = new JsPDF({ unit: 'mm', format: 'a4', compress: true });
+  const doc = new kit.JsPDF({ unit: 'mm', format: 'a4', compress: true });
 
-  const ink   = tokenValue('--ink')  || '#303030';
-  const soft  = tokenValue('--ink2') || '#545763';
-  const hair  = tokenValue('--rule') || '#808080';
-  const good  = tokenValue('--paid') || '#4A7A42';
-  const bars  = [1, 2, 3, 4, 5, 6].map((n) => tokenValue('--accent-' + n));
+  doc.addFileToVFS('Montserrat-Regular.ttf', kit.fonts.MONTSERRAT_REGULAR);
+  doc.addFont('Montserrat-Regular.ttf', 'Montserrat', 'normal');
+  doc.addFileToVFS('Montserrat-Bold.ttf', kit.fonts.MONTSERRAT_BOLD);
+  doc.addFont('Montserrat-Bold.ttf', 'Montserrat', 'bold');
 
-  const L = 18;          // left margin
-  const R = 192;         // right margin
-  const QTY  = 122;      // right edge of the qty column
-  const UNIT = 155;      // right edge of the unit price column
+  const lines = inv.lines || [];
+  const at = layout(lines.length);
 
-  const label = (text, x, y, align) => {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(soft);
-    doc.setCharSpace(0.6);
-    doc.text(text.toUpperCase(), x, y, align ? { align: align } : undefined);
-    doc.setCharSpace(0);
+  // ---- the small helpers ----
+
+  // Excel sits text on the floor of its cell. This works out where that
+  // floor is for a given size, so nothing has to be nudged by hand.
+  const foot = (bottom, size) => bottom - size * PT * 0.28 - 0.75;
+
+  const type = (size, weight, colour) => {
+    doc.setFont('Montserrat', weight || 'normal');
+    doc.setFontSize(size);
+    doc.setTextColor(colour || T.black);
   };
 
-  const body = (size, weight, colour) => {
-    doc.setFont('helvetica', weight || 'normal');
-    doc.setFontSize(size || 9.5);
-    doc.setTextColor(colour || ink);
+  const fill = (x, y, w, h, colour) => {
+    doc.setFillColor(colour);
+    doc.rect(x, y, w, h, 'F');
   };
 
-  const rule = (x1, y, x2, weight, colour) => {
-    doc.setDrawColor(colour || hair);
+  const rule = (x1, y, x2, colour, weight) => {
+    doc.setDrawColor(colour || T.thin);
     doc.setLineWidth(weight || 0.2);
     doc.line(x1, y, x2, y);
   };
 
-  // ---- header ----
-  if (logo) {
-    doc.addImage(logo, 'PNG', L, 15, 50, 25);
-  } else {
-    body(20, 'bold');
-    doc.text(ME.company.toUpperCase(), L, 30);
-  }
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(26);
-  doc.setTextColor(ink);
-  doc.setCharSpace(1.2);
-  doc.text('INVOICE', R, 27, { align: 'right' });
-  doc.setCharSpace(0);
-
-  body(9.5);
-  doc.text(dotDate(inv.issued_on), R, 35, { align: 'right' });
-  doc.text(inv.number, R, 40.5, { align: 'right' });
-
-  body(8, 'normal', soft);
-  doc.text(
-    `Payment terms — due within ${inv.terms_days == null ? 7 : inv.terms_days} days of receipt`,
-    R, 49, { align: 'right' }
-  );
-
-  // The six-bar rule off the front of the app. Delete these three lines
-  // if you'd rather the invoice didn't carry it.
-  const barWidth = (R - L) / bars.length;
-  bars.forEach((colour, i) => {
-    doc.setFillColor(colour);
-    doc.rect(L + i * barWidth, 55, barWidth + 0.2, 1.6, 'F');
-  });
-
-  // ---- the two address blocks ----
-  const MID = 108;
-  label('Invoice to', L, 66);
-  label('Invoice from', MID, 66);
-  rule(L, 68.5, MID - 6);
-  rule(MID, 68.5, R);
-
-  const block = (lines, x, top) => {
-    let y = top;
-    lines.filter(Boolean).forEach((text, i) => {
-      body(9.5, i === 0 ? 'bold' : 'normal');
-      doc.splitTextToSize(String(text), (x === L ? MID - 6 : R) - x).forEach((piece) => {
-        doc.text(piece, x, y);
-        y += 4.8;
-      });
-    });
-    return y;
+  const vrule = (x, y1, y2, colour) => {
+    doc.setDrawColor(colour || T.cell);
+    doc.setLineWidth(0.2);
+    doc.line(x, y1, x, y2);
   };
 
-  const leftEnd = block(
-    [inv.bill_contact, inv.bill_company, inv.bill_address, inv.bill_phone, inv.bill_email],
-    L, 75
-  );
-  const rightEnd = block(
-    [ME.name, ME.company, ME.address, ME.phone, ME.email],
-    MID, 75
-  );
+  // ---- the bar across the top ----
+  fill(S.sheetL, at.band1, S.sheetR - S.sheetL, at.panel - at.band1, T.band);
 
-  // ---- the table ----
-  let y = Math.max(leftEnd, rightEnd, 104) + 8;
+  // ---- the pale block the logo sits on ----
+  fill(S.sheetL, at.panel, S.sheetR - S.sheetL, at.panelEnd - at.panel, T.panel);
 
-  rule(L, y, R, 0.4, ink);
-  y += 5.5;
-  label('Description', L, y);
-  label('Qty', QTY, y, 'right');
-  label('Unit price', UNIT, y, 'right');
-  label('Total', R, y, 'right');
-  y += 3;
-  rule(L, y, R, 0.4, ink);
-  y += 7;
-
-  (inv.lines || []).forEach((line) => {
-    const pieces = doc.splitTextToSize(String(line.d || ''), 96);
-
-    // A page break mid-invoice is rare but not impossible.
-    if (y + pieces.length * 4.6 > 250) {
-      doc.addPage();
-      y = 25;
-    }
-
-    body(9.5);
-    pieces.forEach((piece, i) => doc.text(piece, L, y + i * 4.6));
-    doc.text(String(line.q == null ? 1 : line.q), QTY, y, { align: 'right' });
-    doc.text(money2(line.u), UNIT, y, { align: 'right' });
-    doc.text(money2(Number(line.q || 0) * Number(line.u || 0)), R, y, { align: 'right' });
-
-    y += Math.max(1, pieces.length) * 4.6 + 3;
-    rule(L, y - 3.4, R);
-  });
-
-  // ---- the totals, and the bank details level with them ----
-  const footTop = y + 5;
-
-  y = footTop;
-  body(9.5, 'normal', soft);
-  doc.text('Subtotal', UNIT, y, { align: 'right' });
-  body(9.5);
-  doc.text(money2(inv.total), R, y, { align: 'right' });
-
-  y += 4;
-  rule(UNIT - 32, y, R, 0.4, ink);
-  y += 7;
-
-  body(11, 'bold');
-  doc.text('Balance due', UNIT, y, { align: 'right' });
-  doc.text(money2(inv.status === 'paid' ? 0 : inv.total), R, y, { align: 'right' });
-
-  if (inv.status === 'paid') {
-    y += 7;
-    body(9, 'bold', good);
-    doc.text('PAID ' + dotDate(inv.paid_on || inv.issued_on), R, y, { align: 'right' });
+  // The mark, at its own proportions, filling the width the template
+  // gives it. logo.png is cropped to the artwork, so no padding to allow for.
+  if (logo) {
+    const w = 70.8;
+    const h = w / 7.03;
+    doc.addImage(logo, 'PNG', 25.76, (at.r4 + at.r6) / 2 - h / 2, w, h);
+  } else {
+    type(20, 'bold', T.black);
+    doc.text(ME.company.toUpperCase(), 25.76, at.r5);
   }
 
-  // ---- payment details ----
-  let py = footTop;
-  label('Payment details', L, py);
-  py += 6;
-  body(9.5);
-  ME.bank.forEach((text) => {
-    doc.text(text, L, py);
-    py += 4.8;
+  // ---- INVOICE, the date and the number ----
+  type(18, 'normal', T.word);
+  doc.text(' INVOICE', S.unitR, foot(at.r6, 18));
+
+  type(10, 'bold', T.navy);
+  const midG = (S.unitR + S.tableR) / 2;
+  doc.text(dotDate(inv.issued_on), midG, foot(at.r7, 10), { align: 'center' });
+  rule(S.unitR, at.r7, S.tableR, T.thin);
+
+  doc.text(inv.number, midG, foot(at.r9, 10), { align: 'center' });
+  rule(S.unitR, at.r9, S.tableR, T.thin);
+
+  // ---- payment terms ----
+  type(9, 'normal', T.slate);
+  doc.text(
+    `Payment terms - Due within ${inv.terms_days == null ? 7 : inv.terms_days} days of receipt`,
+    S.tableR, foot(at.r12, 9), { align: 'right' }
+  );
+
+  // ---- the two address blocks ----
+  type(9, 'bold', T.navy);
+  doc.text('INVOICE TO', S.tableL, foot(at.r12End, 9));
+  doc.text('INVOICE FROM', S.fromX, foot(at.r12End, 9));
+  rule(S.tableL, at.r12End, 90.76, T.thin);
+  rule(S.fromX, at.r12End, S.tableR, T.thin);
+
+  const block = (rows, x, limit) => {
+    type(10, 'normal', T.black);
+    let y = at.details + at.rowH;
+    rows.filter(Boolean).forEach((text) => {
+      doc.splitTextToSize(String(text), limit - x).forEach((piece) => {
+        doc.text(piece, x, foot(y, 10));
+        y += at.rowH;
+      });
+    });
+  };
+
+  block([inv.bill_contact, inv.bill_company, inv.bill_address, inv.bill_phone, inv.bill_email],
+        S.tableL, 90.76);
+  block([ME.name, ME.company, ME.address, ME.phone, ME.email],
+        S.fromX, S.tableR);
+
+  // ---- the table header ----
+  fill(S.tableL, at.head, S.tableR - S.tableL, at.headEnd - at.head, T.band);
+
+  type(9, 'bold', T.white);
+  const headY = foot(at.headEnd, 9);
+  doc.text('DESCRIPTION', (S.tableL + S.descR) / 2, headY, { align: 'center' });
+  doc.text('QTY',         (S.descR + S.qtyR) / 2,  headY, { align: 'center' });
+  doc.text('UNIT PRICE',  (S.qtyR + S.unitR) / 2,  headY, { align: 'center' });
+  doc.text('TOTAL',       (S.unitR + S.tableR) / 2, headY, { align: 'center' });
+
+  // ---- the ruled line rows ----
+  // Every other row is shaded, and the shading runs whether or not there's
+  // anything on it. That banding is most of what makes the template look
+  // like the template.
+  for (let i = 0; i < at.rows; i++) {
+    const top = at.body + i * at.rowH;
+    if (i % 2 === 1) {
+      fill(S.tableL, top, S.tableR - S.tableL, at.rowH, T.panel);
+    }
+
+    const line = lines[i];
+    if (!line) continue;
+
+    type(9, 'normal', T.black);
+    const base = foot(top + at.rowH, 9);
+    const text = doc.splitTextToSize(String(line.d || ''), S.descR - S.tableL - 2 * S.pad)[0] || '';
+
+    doc.text(text, S.tableL + S.pad, base);
+    doc.text(String(line.q == null ? 1 : line.q), (S.descR + S.qtyR) / 2, base, { align: 'center' });
+    doc.text(bare(line.u), S.unitR - S.pad, base, { align: 'right' });
+    doc.text(money2(Number(line.q || 0) * Number(line.u || 0)), S.tableR - S.pad, base, { align: 'right' });
+  }
+
+  // The box: four uprights, a lid and a floor.
+  [S.tableL, S.descR, S.qtyR, S.unitR, S.tableR].forEach((x) => {
+    vrule(x, at.body, at.bodyEnd, T.cell);
+  });
+  rule(S.tableL, at.body, S.tableR, T.cell);
+  rule(S.tableL, at.bodyEnd, S.tableR, T.cell);
+
+  // ---- payment details, and the totals ----
+  type(12, 'bold', T.grey);
+  doc.text('Payment Details', S.colC, foot(at.r33End, 12));
+
+  type(8, 'bold', T.slate);
+  doc.text('SUBTOTAL', S.unitR, foot(at.r33End, 8), { align: 'right' });
+
+  type(9, 'normal', T.black);
+  doc.text(money2(inv.total), S.tableR - S.pad, foot(at.r33End, 9), { align: 'right' });
+  rule(S.unitR, at.r33End, S.tableR, T.thin);
+
+  // The bank lines, three of them, sitting under the heading.
+  type(9, 'normal', T.grey);
+  ME.bank.forEach((text, i) => {
+    doc.text(text, S.colC, at.r34 + 3.6 + i * 3.6);
   });
 
-  // ---- footer ----
-  rule(L, 278, R);
-  body(7.5, 'normal', soft);
-  doc.text([ME.company, ME.email, ME.phone].join('   ·   '), L, 283);
-  doc.text(inv.number, R, 283, { align: 'right' });
+  // Balance due: pale block, black line above and below, the only heavy
+  // number on the page.
+  fill(S.unitR, at.r34, S.tableR - S.unitR, at.r34End - at.r34, T.due);
+  rule(S.qtyR, at.r34, S.tableR, T.black, 0.3);
+  rule(S.unitR, at.r34End, S.tableR, T.black, 0.3);
+
+  type(12, 'bold', T.slate);
+  doc.text('Balance Due', S.unitR - S.pad, foot(at.r34End, 12), { align: 'right' });
+
+  type(14, 'bold', T.black);
+  doc.text(money2(inv.total), S.tableR - S.pad, foot(at.r34End, 14), { align: 'right' });
+
+  // ---- the bar across the bottom ----
+  fill(S.sheetL, at.band2, S.sheetR - S.sheetL, at.end - at.band2, T.band);
 
   return doc;
 }
