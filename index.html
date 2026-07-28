@@ -713,6 +713,10 @@
   </div>
 </nav>
 
-<script type="module" src="app.js"></script>
+<!-- The ?v= on the end is a cache-buster. Browsers hang on to app.js
+     harder than anything else here, so when you next change it and the
+     site doesn't seem to notice, bump this number to v=3 and the
+     problem goes away. It has no other purpose. -->
+<script type="module" src="app.js?v=2"></script>
 </body>
 </html>
