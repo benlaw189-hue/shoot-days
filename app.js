@@ -2139,7 +2139,34 @@ function renderMoney() {
     : 'No mileage logged.';
 
   renderSuggested();
+  renderDoubleCheck();
   renderMoneyList();
+}
+
+// The one way this table and your invoices can disagree.
+//
+// Your old sheet's income lines live in here as entries, because the
+// invoices behind them were raised before the app existed. If you ever
+// raise an invoice in the app carrying a number that's already sitting
+// in an imported line, the year would count that money twice. Nothing
+// stops you doing it — but you'd want to be told.
+function renderDoubleCheck() {
+  const numbers = new Set(invoices.map((i) => String(i.number || '').trim().toUpperCase()));
+
+  const clashes = entries.filter((e) =>
+    e.ref && numbers.has(String(e.ref).trim().toUpperCase()));
+
+  if (!clashes.length) {
+    el('doublecheck').classList.add('hidden');
+    return;
+  }
+
+  el('doublecheck').classList.remove('hidden');
+  el('doublecheck').innerHTML =
+    'Counted twice: ' + escapeText(clashes.map((e) => e.ref).join(', '))
+    + ' ' + (clashes.length === 1 ? 'is' : 'are')
+    + ' both an invoice in the app and a line brought in from your old sheet. '
+    + 'Delete the imported line to fix it — tap it, then Delete this entry.';
 }
 
 function buildYearChips() {
@@ -2276,7 +2303,18 @@ el('suggest').addEventListener('click', async (event) => {
   refresh();
 });
 
-// ---- the list ----
+// ---- the list, laid out as the sheet ----
+//
+// Six columns in the order your spreadsheet has them, month headings
+// between the blocks, and the same three summary lines at the bottom.
+// On a narrow phone the table scrolls sideways rather than folding the
+// columns up — a column that disappears at certain widths is worse than
+// one you have to reach for.
+
+function statusWord(row) {
+  if (row.settled) return 'Paid';
+  return row.direction === 'in' ? 'Invoice pending' : 'To be paid';
+}
 
 function renderMoneyList() {
   const rows = visibleMoneyRows();
@@ -2289,8 +2327,7 @@ function renderMoneyList() {
     return;
   }
 
-  // Grouped by month, with the month's own two figures on the heading —
-  // which is the one thing your spreadsheet couldn't easily show you.
+  // Grouped by month, newest month first, in the sheet's own order.
   const months = [];
   const seen = {};
   rows.forEach((r) => {
@@ -2299,7 +2336,7 @@ function renderMoneyList() {
     seen[key].push(r);
   });
 
-  el('molist').innerHTML = months.map((key) => {
+  const body = months.map((key) => {
     const group = seen[key];
     const [y, m] = key.split('-').map(Number);
     const name = new Date(y, m - 1, 1)
@@ -2308,150 +2345,79 @@ function renderMoneyList() {
     const inSum  = group.filter((r) => r.direction === 'in').reduce((t, r) => t + r.amount, 0);
     const outSum = group.filter((r) => r.direction === 'out').reduce((t, r) => t + r.amount, 0);
 
-    return `
-      <div class="monthhead">
-        <span>${escapeText(name)}</span>
-        <span class="monthsum">
-          ${inSum ? '<b class="in">+' + money(inSum) + '</b>' : ''}
-          ${outSum ? '<b class="out">&minus;' + money(outSum) + '</b>' : ''}
-        </span>
-      </div>` + group.map(moneyRowHTML).join('');
+    const head = `
+      <tr class="mrow">
+        <td>${escapeText(name.toUpperCase())}</td>
+        <td class="num">${inSum ? money2(inSum) : ''}</td>
+        <td class="num">${outSum ? money2(outSum) : ''}</td>
+        <td colspan="3"></td>
+      </tr>`;
+
+    return head + group.map((r) => {
+      const isIn = r.direction === 'in';
+      return `
+      <tr class="r ${r.kind}" data-kind="${r.kind}" data-id="${escapeAttr(r.id)}">
+        <td class="dt">${dotDate(r.date)}</td>
+        <td class="num in">${isIn ? money2(r.amount) : ''}</td>
+        <td class="num out">${isIn ? '' : money2(r.amount)}</td>
+        <td class="num">${r.miles == null ? '' : Math.round(r.miles)}</td>
+        <td class="ds">${escapeText([r.ref, r.description].filter(Boolean).join(' — '))}</td>
+        <td class="st"><span class="pill${r.settled ? ' paid' : ''}">${escapeText(statusWord(r))}</span></td>
+      </tr>`;
+    }).join('');
   }).join('');
-}
 
-function moneyRowHTML(row) {
-  const isIn = row.direction === 'in';
-  const colour = isIn
-    ? (row.settled ? 'var(--paid)' : 'var(--accent-4)')
-    : (row.settled ? 'var(--neutral)' : 'var(--stamp)');
+  const totalIn  = rows.filter((r) => r.direction === 'in').reduce((t, r) => t + r.amount, 0);
+  const totalOut = rows.filter((r) => r.direction === 'out').reduce((t, r) => t + r.amount, 0);
+  const miles    = rows.reduce((t, r) => t + Number(r.miles || 0), 0);
 
-  const note = [
-    row.ref,
-    row.category ? titleCase(row.category) : '',
-    row.miles ? Math.round(row.miles) + ' miles' : ''
-  ].filter(Boolean).join(' · ');
+  const foot = `
+    <tr class="tot">
+      <td></td>
+      <td class="num">${money2(totalIn)}</td>
+      <td class="num">${money2(totalOut)}</td>
+      <td class="num">${Math.round(miles)}</td>
+      <td colspan="2"></td>
+    </tr>
+    <tr class="sums"><td colspan="4"></td><td>TOTAL MILEAGE COST</td><td class="num">${money2(miles * MILEAGE_RATE)}</td></tr>
+    <tr class="sums"><td colspan="4"></td><td>TOTAL EXPENSES</td><td class="num">${money2(totalOut)}</td></tr>
+    <tr class="sums big"><td colspan="4"></td><td>PROFIT</td><td class="num">${money2(totalIn - totalOut)}</td></tr>`;
 
-  // An invoice row can't be edited from here — the invoice is the
-  // original, and this is a view of it. The menu says so and offers the
-  // way through rather than a dead end.
-  const menu = row.kind === 'invoice'
-    ? `<div class="menu hidden">
-         <div class="error hidden"></div>
-         <p class="mnote">This comes from invoice ${escapeText(row.ref)}. Change it there and it changes here —
-            mark the invoice paid and this moves with it.</p>
-         <div class="chips">
-           <button type="button" class="chip" data-mact="goinv" data-id="${escapeAttr(row.id)}">Open in Invoices</button>
-         </div>
-       </div>`
-    : `<div class="menu hidden">
-         <div class="error hidden"></div>
-         <div class="label">Status</div>
-         <div class="chips">
-           <button type="button" class="chip${row.settled ? '' : ' on'}"
-                   data-mact="status" data-id="${escapeAttr(row.id)}" data-value="pending">${isIn ? 'Not in yet' : 'Still to pay'}</button>
-           <button type="button" class="chip${row.settled ? ' on' : ''}"
-                   data-mact="status" data-id="${escapeAttr(row.id)}" data-value="settled">${isIn ? 'Received' : 'Paid'}</button>
-         </div>
-         <div class="chips">
-           <button type="button" class="chip" data-mact="edit" data-id="${escapeAttr(row.id)}">Edit</button>
-           <button type="button" class="chip danger" data-mact="delete" data-id="${escapeAttr(row.id)}">Delete</button>
-         </div>
-       </div>`;
-
-  return `
-    <div class="shootwrap mo" style="border-left-color:${colour}">
-      <div class="shoot">
-        <div class="when">
-          <div class="date">${dotDate(row.date)}</div>
-          <div class="time">${escapeText(row.settled ? (isIn ? 'received' : 'paid') : row.pendingWord)}</div>
-        </div>
-        <div class="mid">
-          <div class="venue">${escapeText(row.description)}</div>
-          <div class="client">${escapeText(note) || '&mdash;'}</div>
-        </div>
-        <div class="end">
-          <div class="fee ${isIn ? 'in' : 'out'}">${isIn ? '+' : '&minus;'}${money2(row.amount)}</div>
-        </div>
-        <button type="button" class="dots" data-mact="menu" data-id="${escapeAttr(row.id)}"
-                aria-expanded="false" aria-label="Options">&#8942;</button>
-      </div>
-      ${menu}
+  el('molist').innerHTML = `
+    <div class="sheetwrap">
+      <table class="sheet">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th class="num">Income</th>
+            <th class="num">Expenditure</th>
+            <th class="num">Mileage</th>
+            <th>Description</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>${body}</tbody>
+        <tfoot>${foot}</tfoot>
+      </table>
     </div>`;
 }
 
-el('molist').addEventListener('click', async (event) => {
-  const button = event.target.closest('button[data-mact]');
-  if (!button) return;
+// Tapping a line opens it. An invoice line can't be edited here — the
+// invoice is the original and this is a view of it — so it says so
+// rather than opening a form that would write to the wrong place.
+el('molist').addEventListener('click', (event) => {
+  const line = event.target.closest('tr[data-id]');
+  if (!line) return;
 
-  const id = button.dataset.id;
-  const wrap = button.closest('.shootwrap');
-  const menu = wrap.querySelector('.menu');
-  const act = button.dataset.mact;
-
-  if (act === 'menu') {
-    const wasOpen = !menu.classList.contains('hidden');
-    closeAllMenus();
-    if (!wasOpen) {
-      menu.classList.remove('hidden');
-      button.classList.add('open');
-      button.setAttribute('aria-expanded', 'true');
-    }
+  if (line.dataset.kind === 'invoice') {
+    const inv = findInvoice(line.dataset.id);
+    flash((inv ? inv.number : 'That line') + ' comes from an invoice. '
+      + 'Edit it, or mark it paid, on the Invoices screen and this line follows.');
     return;
   }
 
-  if (act === 'goinv') {
-    closeAllMenus();
-    goto('invoices');
-    return;
-  }
-
-  const entry = entries.find((e) => String(e.id) === String(id));
-  if (!entry) return;
-
-  if (act === 'edit') {
-    startEditEntry(entry);
-    return;
-  }
-
-  if (act === 'status') {
-    const value = button.dataset.value;
-    if (entry.status === value) { closeAllMenus(); return; }
-
-    button.textContent = '…';
-    const problem = await changeEntry(id, { status: value });
-    if (problem) { menuError(menu, problem); return; }
-    refresh();
-    return;
-  }
-
-  if (act === 'delete') {
-    if (button.dataset.armed !== '1') {
-      button.dataset.armed = '1';
-      button.classList.add('armed');
-      button.textContent = 'Tap again to delete';
-      setTimeout(() => {
-        button.dataset.armed = '';
-        button.classList.remove('armed');
-        button.textContent = 'Delete';
-      }, 5000);
-      return;
-    }
-
-    button.textContent = 'Deleting…';
-    const { data, error } = await supabase
-      .from('entries').delete().eq('id', id).select('id');
-
-    if (error || !data || !data.length) {
-      button.dataset.armed = '';
-      button.classList.remove('armed');
-      button.textContent = 'Delete';
-      menuError(menu, error ? error.message : 'The database refused that.');
-      return;
-    }
-    if (editingEntry && String(editingEntry.id) === String(id)) closeEntryForm();
-    flash('That entry has gone.');
-    refresh();
-  }
+  const entry = entries.find((e) => String(e.id) === String(line.dataset.id));
+  if (entry) startEditEntry(entry);
 });
 
 async function changeEntry(id, patch) {
@@ -2495,6 +2461,7 @@ function openEntryForm(direction) {
 
   el('entrytitle').textContent = direction === 'in' ? 'Add money in' : 'Add money out';
   el('saveentry').textContent = 'Save entry';
+  hide('deleteentry');
   show('newentry');
   el('f_e_amount').focus();
 }
@@ -2519,9 +2486,47 @@ function startEditEntry(entry) {
 
   el('entrytitle').textContent = 'Edit entry';
   el('saveentry').textContent = 'Save changes';
+  el('deleteentry').textContent = 'Delete this entry';
+  el('deleteentry').dataset.armed = '';
+  el('deleteentry').classList.remove('armed');
+  show('deleteentry');
   show('newentry');
   el('newentry').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
+
+el('deleteentry').addEventListener('click', async () => {
+  if (!editingEntry) return;
+  const button = el('deleteentry');
+
+  if (button.dataset.armed !== '1') {
+    button.dataset.armed = '1';
+    button.classList.add('armed');
+    button.textContent = 'Tap again to delete';
+    setTimeout(() => {
+      button.dataset.armed = '';
+      button.classList.remove('armed');
+      button.textContent = 'Delete this entry';
+    }, 5000);
+    return;
+  }
+
+  button.textContent = 'Deleting…';
+  const { data, error } = await supabase
+    .from('entries').delete().eq('id', editingEntry.id).select('id');
+
+  if (error || !data || !data.length) {
+    button.dataset.armed = '';
+    button.classList.remove('armed');
+    button.textContent = 'Delete this entry';
+    el('entryerror').textContent = error ? error.message : 'The database refused that.';
+    show('entryerror');
+    return;
+  }
+
+  closeEntryForm();
+  flash('That entry has gone.');
+  refresh();
+});
 
 function closeEntryForm() {
   editingEntry = null;

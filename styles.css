@@ -97,13 +97,26 @@ button {
   background: var(--ink); color: var(--paper); border: none; cursor: pointer;
   border-radius: var(--radius);
 }
-button:hover { background: var(--stamp); }
+
 button:disabled { background: var(--ink3); cursor: default; }
 button.quiet {
   background: none; color: var(--ink2); border: 1px solid var(--rule);
   font-size: 12px; padding: 9px;
 }
-button.quiet:hover { background: var(--card); color: var(--ink); }
+
+/* Hover only where there's a real pointer. On a phone a tapped button
+   keeps its hover colour until you touch something else, which is why
+   Money in sat there looking pressed. */
+@media (hover: hover) {
+  button:hover { background: var(--stamp); }
+  button.quiet:hover { background: var(--card); color: var(--ink); }
+}
+button.quiet.danger {
+  color: var(--stamp); border-color: color-mix(in srgb, var(--stamp) 35%, var(--rule));
+}
+button.quiet.danger.armed {
+  background: var(--stamp); color: var(--paper); border-color: var(--stamp);
+}
 p { font-size: 14px; line-height: 1.6; margin: 0 0 12px; }
 .error {
   background: var(--error-bg); border-left: 3px solid var(--stamp); color: var(--error-ink);
@@ -270,23 +283,71 @@ p { font-size: 14px; line-height: 1.6; margin: 0 0 12px; }
 #newentry { border: 1px solid var(--ink); padding: 16px 16px 6px; margin-bottom: 20px; }
 .chips.gap { margin-top: 22px; }
 
-/* A month's worth, with its own two figures on the heading. */
-.monthhead {
-  display: flex; justify-content: space-between; align-items: baseline;
-  border-bottom: 1px solid var(--rule); padding: 14px 0 5px; margin-bottom: 1px;
-  font-family: var(--mono); font-size: 11px;
-  letter-spacing: var(--track); text-transform: uppercase; color: var(--ink3);
+/* The sheet. Six columns in the order the spreadsheet has them. On a
+   narrow screen it scrolls sideways rather than dropping columns —
+   a figure that vanishes at certain widths is worse than one you have
+   to reach for. */
+.sheetwrap {
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  border-bottom: 1px solid var(--rule);
 }
-.monthsum b { font-weight: 400; margin-left: 9px; }
-.monthsum .in  { color: var(--paid); }
-.monthsum .out { color: var(--stamp); }
+table.sheet {
+  width: 100%; min-width: 660px;
+  border-collapse: collapse;
+  font-size: 13px; background: var(--card);
+}
+table.sheet th {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--paper);
+  background: var(--ink); text-align: left;
+  padding: 8px 10px; white-space: nowrap; position: sticky; top: 0;
+}
+table.sheet td {
+  padding: 9px 10px; border-bottom: 1px solid var(--rule);
+  vertical-align: top; line-height: 1.35;
+}
+table.sheet .num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+table.sheet th.num { text-align: right; }
+table.sheet .dt { font-family: var(--mono); white-space: nowrap; color: var(--ink2); }
+table.sheet .ds { min-width: 260px; }
+table.sheet td.in  { color: var(--paid); }
+table.sheet td.out { color: var(--stamp); }
 
-.shootwrap.mo .when { min-width: 76px; }
-.shootwrap.mo .end { min-width: 96px; }
-.shootwrap.mo .fee.in  { color: var(--paid); }
-.shootwrap.mo .fee.out { color: var(--stamp); }
-.shootwrap.mo .time { text-transform: lowercase; }
-.mnote { font-size: 13px; color: var(--ink2); margin-bottom: 12px; }
+table.sheet tr.r { cursor: pointer; }
+table.sheet tr.r:hover td { background: var(--paper); }
+table.sheet tr.invoice .ds { font-style: italic; }
+
+/* A month's block heading, with that month's two figures on it. */
+table.sheet tr.mrow td {
+  background: var(--paper); border-top: 1.5px solid var(--ink);
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink); padding-top: 10px; padding-bottom: 7px;
+}
+
+/* The summary block, the same three lines the spreadsheet ends on. */
+table.sheet tfoot .tot td {
+  border-top: 1.5px solid var(--ink); border-bottom: 1px solid var(--ink);
+  font-family: var(--mono); background: var(--paper);
+}
+table.sheet tfoot .sums td {
+  border-bottom: none; padding: 5px 10px;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2);
+}
+table.sheet tfoot .sums.big td {
+  font-size: 13px; color: var(--ink); padding-top: 8px;
+  border-top: 1px solid var(--rule);
+}
+
+/* Paid or not, said in a word rather than a colour alone. */
+.pill {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em;
+  text-transform: uppercase; white-space: nowrap;
+  border: 1px solid var(--stamp); color: var(--stamp); padding: 2px 6px;
+}
+.pill.paid { border-color: var(--rule); color: var(--ink2); }
+
+#doublecheck { margin-top: 16px; }
 
 /* The one-tap suggestions sit tight to their button. */
 #suggest .mini button { width: auto; flex: 0 0 auto; }
