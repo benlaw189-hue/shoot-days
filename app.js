@@ -30,6 +30,37 @@ const OUT_CATEGORIES = [
   'fuel', 'tolls & parking', 'kit', 'software', 'other'
 ];
 
+// ============================================================
+// The words the Status column on the money sheet can say.
+//
+// `settled` is the only part the figures care about: true means the
+// money has actually moved, false means it hasn't. Everything else here
+// is the wording on top of that, so you can add, rename or delete lines
+// freely without any total going wrong.
+//
+// `side` decides which lines get offered it — 'in' for income, 'out'
+// for expenditure, 'both' for either. If you want one offered on both
+// sides, change that word and nothing else.
+//
+// `tone` names a slot in the palette at the top of styles.css.
+//
+// Anything saved under a word you later delete carries on showing that
+// word until you set it to something else, same as the job types.
+// ============================================================
+const LABELS = [
+  { value: 'paid',             word: 'Paid',                             settled: true,  side: 'both', tone: '--paid' },
+  { value: 'pending',          word: 'Pending',                          settled: false, side: 'both', tone: '--accent-5' },
+  { value: 'chased',           word: 'Chased',                           settled: false, side: 'in',   tone: '--owed' },
+  { value: 'invoice_pending',  word: 'Invoice pending',                  settled: false, side: 'in',   tone: '--accent-4' },
+  { value: 'invoice_received', word: 'Invoice received, to be paid',     settled: false, side: 'out',  tone: '--status-blue' },
+  { value: 'waiting_to_pay',   word: 'Money received, waiting to pay J', settled: true,  side: 'in',   tone: '--status-plum' },
+  { value: 'money_out',        word: 'Money out',                        settled: false, side: 'out',  tone: '--neutral' },
+
+  // Invoices only. A draft hasn't left the building, which isn't a thing
+  // a hand-typed entry can be.
+  { value: 'draft',            word: 'Draft',                            settled: false, side: 'both', tone: '--ink2', invoiceOnly: true }
+];
+
 // What a mile is worth. HMRC's simplified rate for a car, first 10,000
 // miles in a tax year, as it stands. The figure is saved onto each entry
 // when you add it, so changing this later re-prices nothing you've
@@ -2046,6 +2077,7 @@ function invoiceAsRow(inv) {
     id:          inv.id,
     kind:        'invoice',
     status:      inv.status,
+    label:       inv.status_label || '',
     date:        (inv.status === 'paid' && inv.paid_on) ? inv.paid_on : inv.issued_on,
     direction:   'in',
     amount:      Number(inv.total || 0),
@@ -2064,6 +2096,7 @@ function entryAsRow(entry) {
     id:          entry.id,
     kind:        'entry',
     status:      entry.status,
+    label:       entry.status_label || '',
     date:        entry.entry_date,
     direction:   entry.direction,
     amount:      Number(entry.amount || 0),
@@ -2313,9 +2346,44 @@ el('suggest').addEventListener('click', async (event) => {
 // columns up — a column that disappears at certain widths is worse than
 // one you have to reach for.
 
+// The word a line says. A line that's been given one of the words above
+// says that word. Everything saved before this existed has no word of
+// its own, so it carries on saying exactly what it said before.
+function labelOf(row) {
+  const label = LABELS.find((l) => l.value === row.label);
+  if (!label) return null;
+
+  // A word that disagrees with whether the money has actually moved is
+  // out of date — the entry form was used to change the status after
+  // the word was set. The figures win, and the line goes back to saying
+  // the plain thing rather than something the sums don't agree with.
+  if (label.settled !== row.settled) return null;
+
+  return label;
+}
+
 function statusWord(row) {
+  const label = labelOf(row);
+  if (label) return label.word;
   if (row.settled) return 'Paid';
   return row.direction === 'in' ? 'Invoice pending' : 'To be paid';
+}
+
+// Outline and text colour for the pill. No word of its own means the
+// old two-colour treatment, so nothing already on the sheet changes.
+function statusColourOf(row) {
+  const label = labelOf(row);
+  if (label) return tokenValue(label.tone);
+  return tokenValue(row.settled ? '--ink2' : '--stamp');
+}
+
+// What this line can be set to. An invoice can be a draft; a typed
+// entry can't, so it isn't offered one.
+function labelsFor(kind, direction) {
+  return LABELS.filter((l) => {
+    if (l.invoiceOnly && kind !== 'invoice') return false;
+    return l.side === 'both' || l.side === direction;
+  });
 }
 
 function renderMoneyList() {
@@ -2366,7 +2434,8 @@ function renderMoneyList() {
         <td class="ds">${escapeText([r.ref, r.description].filter(Boolean).join(' — '))}</td>
         <td class="st"><button type="button" class="pill${r.settled ? ' paid' : ''}"
               data-st="1" data-kind="${r.kind}" data-id="${escapeAttr(r.id)}"
-              data-now="${escapeAttr(r.status || '')}" data-dir="${r.direction}"
+              data-label="${escapeAttr((labelOf(r) || {}).value || '')}" data-dir="${r.direction}"
+              style="color:${statusColourOf(r)};border-color:${statusColourOf(r)}"
               aria-label="Status ${escapeAttr(statusWord(r))}. Tap to change it."
               >${escapeText(statusWord(r))}</button></td>
       </tr>`;
@@ -2410,93 +2479,71 @@ function renderMoneyList() {
 
 // ---- changing a status from the sheet itself ----
 //
-// The words in the column don't change. What changes is that they're now
-// a button, and tapping one offers the other words that line could say.
-// Nothing new is stored: an entry's choice writes to that entry, and an
-// invoice's choice writes to that invoice — the same field the Invoices
-// screen writes to. So the sheet and the invoice can't drift apart,
-// because there's still only one copy of the answer.
+// Tapping a pill opens a row of the words that line could say, tucked
+// under the line itself. It's a row of the table rather than something
+// floating over it, so there's no positioning to go wrong in a table
+// that already scrolls sideways — and no native dropdown fighting with
+// ours, which is what the two-menus problem was.
 //
-// An entry has two states. An invoice has three, because a draft hasn't
-// left the building yet and that's worth being able to say from here.
-function statusChoices(kind, direction) {
-  if (kind === 'invoice') {
-    return [
-      ['draft', 'Draft'],
-      ['sent',  'Invoice pending'],
-      ['paid',  'Paid']
-    ];
-  }
-  return [
-    ['pending', direction === 'in' ? 'Invoice pending' : 'To be paid'],
-    ['settled', 'Paid']
-  ];
+// Nothing new is stored twice: an entry's word writes to that entry,
+// an invoice's word writes to that invoice — the same field the
+// Invoices screen writes to. So the sheet and the invoice can't drift.
+function closeStatusPicker() {
+  const open = document.querySelector('tr.stedit');
+  if (open) open.remove();
 }
 
-// A plain dropdown rather than a menu of our own, so on a phone you get
-// the proper native picker instead of something fiddly inside a table
-// that already scrolls sideways.
 function openStatusPicker(pill) {
-  const cell = pill.parentNode;
-  if (cell.querySelector('select.stpick')) return;
+  const line = pill.closest('tr');
+  const open = document.querySelector('tr.stedit');
+  const wasMine = open && open.previousElementSibling === line;
 
-  const kind = pill.dataset.kind;
-  const now  = pill.dataset.now;
+  closeStatusPicker();
+  if (wasMine) return;               // tapping the same pill again shuts it
 
-  const pick = document.createElement('select');
-  pick.className = 'stpick';
-  pick.innerHTML = statusChoices(kind, pill.dataset.dir)
-    .map(([value, word]) =>
-      `<option value="${value}"${value === now ? ' selected' : ''}>${word}</option>`)
-    .join('');
+  const now = pill.dataset.label || '';
 
-  pill.classList.add('hidden');
-  cell.appendChild(pick);
+  const chips = labelsFor(pill.dataset.kind, pill.dataset.dir).map((l) => {
+    const tone = tokenValue(l.tone);
+    const style = l.value === now
+      ? `background:${tone};border-color:${tone};color:${readableOn(l.tone)}`
+      : `color:${tone};border-color:${tone}`;
 
-  let chosen = false;
-  const putBack = () => {
-    if (chosen) return;
-    pick.remove();
-    pill.classList.remove('hidden');
-  };
+    return `
+        <button type="button" class="chip stchip${l.value === now ? ' on' : ''}"
+                data-lab="${l.value}" style="${style}"
+                >${escapeText(l.word)}</button>`;
+  }).join('');
 
-  pick.addEventListener('change', async () => {
-    const value = pick.value;
-    if (value === now) { putBack(); return; }
+  const editor = document.createElement('tr');
+  editor.className = 'stedit';
+  editor.dataset.kind = pill.dataset.kind;
+  editor.dataset.id = pill.dataset.id;
+  editor.innerHTML = `
+      <td colspan="6">
+        <div class="label">Set this line to</div>
+        <div class="chips">${chips}</div>
+        <div class="error hidden"></div>
+      </td>`;
 
-    chosen = true;
-    pick.disabled = true;
-
-    const problem = await applyStatus(kind, pill.dataset.id, value);
-
-    // A win redraws the whole sheet, so there's nothing to put back.
-    // A refusal leaves the old word where it was and says why.
-    if (problem) {
-      chosen = false;
-      pick.disabled = false;
-      putBack();
-      flash(problem);
-    }
-  });
-
-  // Tapping away without choosing just closes it again. The delay is
-  // there because some phones blur the dropdown a moment before they
-  // tell us what was picked.
-  pick.addEventListener('focusout', () => setTimeout(putBack, 200));
-
-  pick.focus();
-  if (typeof pick.showPicker === 'function') {
-    try { pick.showPicker(); } catch (ignored) { /* older browsers */ }
-  }
+  line.after(editor);
 }
 
 // Returns null if it went through, or the reason it didn't.
 async function applyStatus(kind, id, value) {
+  const label = LABELS.find((l) => l.value === value);
+  if (!label) return 'That word isn\'t in the list any more.';
+
   if (kind === 'entry') {
-    const problem = await changeEntry(id, { status: value });
+    // The word, and the plain settled-or-not the figures run on. Both,
+    // together, so the sums can never disagree with what's on screen.
+    const problem = await patchEntry(id, {
+      status: label.settled ? 'settled' : 'pending',
+      status_label: value
+    });
     if (problem) return problem;
 
-    flash(value === 'settled' ? 'Marked paid.' : 'Put back to not paid yet.');
+    flash('Now says ' + label.word.toLowerCase() + '.');
     refresh();
     return null;
   }
@@ -2504,36 +2551,82 @@ async function applyStatus(kind, id, value) {
   const inv = findInvoice(id);
   if (!inv) return 'That invoice isn\'t there any more. Pull the screen down to reload.';
 
-  // Same patch the Invoices screen builds, for the same reasons: sent
-  // and paid want dating, and an invoice that's been pulled back off
-  // paid shouldn't keep a payment date it no longer has.
-  const patch = { status: value };
-  if (value === 'sent' && !inv.sent_on) patch.sent_on = todayISO();
-  if (value === 'paid') patch.paid_on = todayISO();
-  if (value !== 'paid' && inv.paid_on) patch.paid_on = null;
+  // An invoice's own status is still draft, sent or paid — that's what
+  // the Invoices screen and the PDF run on. The word chosen here sits
+  // alongside it and decides which of the three it means.
+  const status = value === 'draft' ? 'draft' : label.settled ? 'paid' : 'sent';
 
-  const problem = await changeInvoice(id, patch);
+  const patch = { status: status, status_label: value };
+  if (status === 'sent' && !inv.sent_on) patch.sent_on = todayISO();
+  if (status === 'paid') patch.paid_on = todayISO();
+  if (status !== 'paid' && inv.paid_on) patch.paid_on = null;
+
+  const problem = await patchInvoice(id, patch);
   if (problem) return problem;
 
   // Marking an invoice paid marks the jobs on it paid too, so the
   // schedule and the sheet can't tell you different things.
   let alsoDone = 0;
-  if (value === 'paid') alsoDone = await markShootsPaid(inv);
+  if (status === 'paid') alsoDone = await markShootsPaid(inv);
 
-  flash(inv.number + ' is now ' + value + '.'
+  flash(inv.number + ' now says ' + label.word.toLowerCase() + '.'
     + (alsoDone ? ` ${alsoDone} ${alsoDone === 1 ? 'shoot' : 'shoots'} marked paid as well.` : ''));
   refresh();
   return null;
+}
+
+// The word needs a column to live in. If that column hasn't been added
+// to the database yet the write comes back complaining about it, so the
+// status still goes through and you get told what's missing rather than
+// silently losing the wording.
+function missingColumn(message) {
+  return /status_label/i.test(String(message || ''));
+}
+
+async function patchEntry(id, patch) {
+  const problem = await changeEntry(id, patch);
+  if (!problem || !missingColumn(problem)) return problem;
+
+  const { status_label, ...rest } = patch;
+  const second = await changeEntry(id, rest);
+  return second || 'Saved as ' + (rest.status === 'settled' ? 'paid' : 'not paid')
+    + ', but the wording needs the status_label column adding first — see status-labels.sql.';
+}
+
+async function patchInvoice(id, patch) {
+  const problem = await changeInvoice(id, patch);
+  if (!problem || !missingColumn(problem)) return problem;
+
+  const { status_label, ...rest } = patch;
+  const second = await changeInvoice(id, rest);
+  return second || 'Status saved, but the wording needs the status_label column adding first — see status-labels.sql.';
 }
 
 // Tapping a line opens it. An invoice line's figures can't be edited here
 // — the invoice is the original and this is a view of it — so it says so
 // rather than opening a form that would write to the wrong place. The
 // status is the exception, and that's the pill, handled above.
-el('molist').addEventListener('click', (event) => {
+el('molist').addEventListener('click', async (event) => {
   const pill = event.target.closest('button[data-st]');
   if (pill) {
     openStatusPicker(pill);
+    return;
+  }
+
+  const chip = event.target.closest('button.stchip');
+  if (chip) {
+    if (chip.classList.contains('on')) { closeStatusPicker(); return; }
+
+    const editor = chip.closest('tr.stedit');
+    const problem = await applyStatus(editor.dataset.kind, editor.dataset.id, chip.dataset.lab);
+
+    // A win redraws the whole sheet. A refusal leaves the old word where
+    // it was and says why, on the line it happened to.
+    if (problem) {
+      const box = editor.querySelector('.error');
+      box.textContent = problem;
+      box.classList.remove('hidden');
+    }
     return;
   }
 

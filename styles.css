@@ -34,6 +34,12 @@
   --owed:    #A83A2B;
   --neutral: #55584F;
 
+  /* The two the money sheet's wording needs that nothing else uses.
+     Muted to sit with the rest rather than the highlighter shades a
+     spreadsheet gives you. */
+  --status-blue: #3F6B8A;
+  --status-plum: #6B5182;
+
   /* ---- the two notice bars --------------------------------------------- */
   --error-bg:  #F7E4E1;
   --error-ink: #7A2A1E;
@@ -359,13 +365,27 @@ button.pill {
 button.pill.paid { border-color: var(--rule); color: var(--ink2); }
 button.pill:hover { background: var(--paper); }
 
-/* The dropdown that takes the pill's place while you're choosing. */
-select.stpick {
-  width: auto; max-width: 170px; margin: 0; padding: 2px 4px;
-  font-family: var(--mono); font-size: 11px;
-  background: var(--card); color: var(--ink);
-  border: 1px solid var(--ink);
+/* Some of the words are a sentence. In the sheet they wrap rather than
+   stretching a table that already scrolls sideways. */
+table.sheet td.st button.pill {
+  white-space: normal; max-width: 150px;
+  text-align: left; line-height: 1.35;
 }
+
+/* The row of words that opens under a line when you tap its status. */
+table.sheet tr.stedit td {
+  background: var(--paper); border-bottom: 1px solid var(--ink);
+  padding: 10px 10px 12px;
+}
+table.sheet tr.stedit .label { margin-bottom: 8px; }
+table.sheet tr.stedit .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+table.sheet tr.stedit .error { margin: 10px 0 0; }
+
+/* The generic chip turns dark on hover, which would fight the colour
+   each word carries. These keep their own colour and just lift. */
+.stchip { cursor: pointer; }
+.stchip:hover { background: var(--card); }
+.stchip.on:hover { filter: brightness(1.08); }
 
 #doublecheck { margin-top: 16px; }
 
