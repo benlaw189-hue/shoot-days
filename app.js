@@ -33,8 +33,8 @@ const CREW = [
 // not stop anyone tagging a job to anyone.
 // ============================================================
 const DEFAULT_TAG_BY_EMAIL = {
-  'ben@example.com':    'B',
-  'jerome@example.com': 'J'
+  'ben@bglmedia.co.uk':    'B',
+  'jerome@bglmedia.co.uk': 'J'
 };
 // ============================================================
 
