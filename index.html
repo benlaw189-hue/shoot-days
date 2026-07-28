@@ -288,6 +288,116 @@
 
     </section>
 
+    <!-- ============ MONEY ============ -->
+    <!-- The income and expenditure tracker. Behind the same permission as
+         invoices, for the same reason. Income rows for invoices are worked
+         out from the invoices themselves and aren't stored twice. -->
+    <section id="screen-money" class="screen hidden">
+
+      <div class="chips" id="yearchips"></div>
+
+      <div class="tally">
+        <div>
+          <div class="label">In</div>
+          <div class="fig" id="m_in">&mdash;</div>
+          <div class="sub" id="m_in_sub"></div>
+        </div>
+        <div>
+          <div class="label">Out</div>
+          <div class="fig" id="m_out">&mdash;</div>
+          <div class="sub" id="m_out_sub"></div>
+        </div>
+        <div>
+          <div class="label">Profit</div>
+          <div class="fig" id="m_profit">&mdash;</div>
+          <div class="sub" id="m_profit_sub"></div>
+        </div>
+      </div>
+
+      <div class="chips" id="basischips"></div>
+      <div class="milesnote" id="m_miles"></div>
+
+      <div class="pair">
+        <div><button type="button" id="addin">Money in</button></div>
+        <div><button type="button" id="addout">Money out</button></div>
+      </div>
+
+      <form id="newentry" class="hidden">
+        <div class="formtitle" id="entrytitle">Add an entry</div>
+        <div id="entryerror" class="error hidden"></div>
+
+        <div class="pair">
+          <div>
+            <div class="label">Direction</div>
+            <select id="f_e_dir">
+              <option value="out">Money out</option>
+              <option value="in">Money in</option>
+            </select>
+          </div>
+          <div>
+            <div class="label">Date</div>
+            <input type="date" id="f_e_date" required>
+          </div>
+        </div>
+
+        <div class="pair">
+          <div>
+            <div class="label">Amount &pound;</div>
+            <input type="number" id="f_e_amount" min="0" step="0.01" inputmode="decimal" required>
+          </div>
+          <div>
+            <div class="label">Category</div>
+            <select id="f_e_cat"></select>
+          </div>
+        </div>
+
+        <div class="label">Description</div>
+        <input type="text" id="f_e_desc" autocomplete="off"
+               placeholder="Train Southport &gt; Glasgow &mdash; Tre Reynolds, Apr 10" required>
+
+        <div class="pair">
+          <div>
+            <div class="label">Their ref</div>
+            <input type="text" id="f_e_ref" autocomplete="off" placeholder="CS0011">
+          </div>
+          <div>
+            <div class="label">Status</div>
+            <select id="f_e_status">
+              <option value="settled">Settled</option>
+              <option value="pending">Not settled yet</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="label">Miles</div>
+        <input type="number" id="f_e_miles" min="0" step="1" inputmode="numeric"
+               placeholder="Leave empty unless you're claiming mileage">
+
+        <button type="submit" id="saveentry">Save entry</button>
+        <div style="height:8px"></div>
+        <button type="button" class="quiet" id="cancelentry">Cancel</button>
+        <div style="height:10px"></div>
+      </form>
+
+      <div id="suggestwrap" class="hidden">
+        <div class="label gap">Costs waiting to be logged</div>
+        <div id="suggest"></div>
+      </div>
+
+      <div class="chips gap" id="mochips"></div>
+
+      <div class="listhead">
+        <span class="label" id="molabel" style="margin:0"></span>
+        <span class="count" id="mocount"></span>
+      </div>
+
+      <div id="molist"></div>
+
+      <div class="spacer"></div>
+      <button type="button" class="quiet" id="downloadcsv">Download as a spreadsheet</button>
+
+    </section>
+
     <!-- ============ ACCOUNT ============ -->
     <section id="screen-more" class="screen hidden">
 
@@ -319,6 +429,11 @@
       <button type="button" class="mi hidden" id="mi_invoices" data-go="invoices">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9.5 12h6M9.5 16h4"/></svg>
         <span>Invoices</span>
+      </button>
+
+      <button type="button" class="mi hidden" id="mi_money" data-go="money">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h16v11H4z"/><circle cx="12" cy="13" r="2.4"/><path d="M7.5 13h.01M16.5 13h.01"/></svg>
+        <span>Money</span>
       </button>
 
       <button type="button" class="mi" data-go="more">

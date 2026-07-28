@@ -257,6 +257,40 @@ p { font-size: 14px; line-height: 1.6; margin: 0 0 12px; }
 .pips i.tr { background: none; }
 .callegend span.hollow { box-shadow: inset 0 0 0 1.5px var(--ink3); }
 
+/* ============================================================
+   The money tracker
+   ============================================================ */
+
+.milesnote {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--ink3); margin: -8px 0 16px;
+}
+#screen-money .pair { margin-bottom: 20px; }
+#screen-money .pair button { margin: 0; }
+#newentry { border: 1px solid var(--ink); padding: 16px 16px 6px; margin-bottom: 20px; }
+.chips.gap { margin-top: 22px; }
+
+/* A month's worth, with its own two figures on the heading. */
+.monthhead {
+  display: flex; justify-content: space-between; align-items: baseline;
+  border-bottom: 1px solid var(--rule); padding: 14px 0 5px; margin-bottom: 1px;
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: var(--track); text-transform: uppercase; color: var(--ink3);
+}
+.monthsum b { font-weight: 400; margin-left: 9px; }
+.monthsum .in  { color: var(--paid); }
+.monthsum .out { color: var(--stamp); }
+
+.shootwrap.mo .when { min-width: 76px; }
+.shootwrap.mo .end { min-width: 96px; }
+.shootwrap.mo .fee.in  { color: var(--paid); }
+.shootwrap.mo .fee.out { color: var(--stamp); }
+.shootwrap.mo .time { text-transform: lowercase; }
+.mnote { font-size: 13px; color: var(--ink2); margin-bottom: 12px; }
+
+/* The one-tap suggestions sit tight to their button. */
+#suggest .mini button { width: auto; flex: 0 0 auto; }
+
 /* ---- who's on it ---- */
 .crewtag {
   font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em;

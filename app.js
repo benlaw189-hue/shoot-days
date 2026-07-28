@@ -18,6 +18,25 @@ const JOB_TYPES = ['wedding', 'corporate', 'event', 'music video', 'commercial',
 const STATUSES  = ['pencilled', 'confirmed', 'delivered', 'invoiced', 'paid'];
 
 // ============================================================
+// The money tracker's categories. Same idea as the job types above —
+// this list is the only place they live, so add or rename freely.
+// Renaming one won't retag anything already saved under the old word;
+// it'll just carry on showing the old word until you edit that entry.
+// ============================================================
+const IN_CATEGORIES  = ['shoot', 'rebilled', 'other'];
+
+const OUT_CATEGORIES = [
+  'crew fee', 'crew expenses', 'travel', 'accommodation',
+  'fuel', 'tolls & parking', 'kit', 'software', 'other'
+];
+
+// What a mile is worth. HMRC's simplified rate for a car, first 10,000
+// miles in a tax year, as it stands. The figure is saved onto each entry
+// when you add it, so changing this later re-prices nothing you've
+// already logged — which is the way round it should be.
+const MILEAGE_RATE = 0.45;
+
+// ============================================================
 // Who's on a shoot. The tag is what gets stored in the database, so once
 // you've used a letter, don't rename it — add a new line instead.
 // 'accent' names a slot in the palette at the top of styles.css. The colour
@@ -331,13 +350,13 @@ function flash(message) {
 
 // ---- which screen is showing ----
 
-const SCREENS = ['home', 'shoots', 'calendar', 'invoices', 'more'];
+const SCREENS = ['home', 'shoots', 'calendar', 'invoices', 'money', 'more'];
 
-// Invoices and Account both live behind the More menu, so both light up
-// the More tab. Everything else lights up its own.
+// Invoices, Money and Account all live behind the More menu, so all three
+// light up the More tab. Everything else lights up its own.
 const TAB_FOR = {
   home: 'home', shoots: 'shoots', calendar: 'calendar',
-  invoices: 'more', more: 'more'
+  invoices: 'more', money: 'more', more: 'more'
 };
 
 function goto(name) {
@@ -439,6 +458,7 @@ async function loadProfile(userId) {
   el('feelabel').innerHTML = isOwner ? 'Fee on schedule &pound;' : 'Fee &pound;';
 
   el('mi_invoices').classList.toggle('hidden', !canInvoice);
+  el('mi_money').classList.toggle('hidden', !canInvoice);
 }
 
 function fillSelect(id, values) {
@@ -497,7 +517,11 @@ const COLUMNS = 'id, shoot_date, call_time, venue, client, fee, job_type, status
 // the schedule fee where the client fee belongs and then corrects itself.
 async function refresh() {
   await loadFees();
-  await Promise.all([loadAll(), loadShoots(), loadInvoices()]);
+  await Promise.all([loadAll(), loadShoots(), loadInvoices(), loadEntries()]);
+
+  // The tracker reads invoices and entries together, so it draws once both
+  // have landed rather than twice, half-finished.
+  renderMoney();
 }
 
 async function loadFees() {
@@ -1947,6 +1971,674 @@ el('newinvoice').addEventListener('submit', async (event) => {
       + (trouble && trouble.message ? trouble.message : trouble)
       + ' Try Download PDF from the row menu.');
   }
+});
+
+// ============================================================
+// The money tracker
+//
+// The one decision worth understanding here: an invoice is NOT copied
+// into this table when you make it. The tracker reads your invoices
+// directly and turns each one into an income row as it draws.
+//
+// The alternative — writing a matching row every time an invoice is
+// saved — would mean the same figure stored twice, and every edit,
+// status change and deletion would have to remember to go and fix the
+// second copy. Miss one and the tracker quietly disagrees with the
+// invoice, and you'd have no way of knowing which was right.
+//
+// So this table only holds what an invoice can't tell us: money going
+// out, and money coming in that didn't come from an invoice — a client
+// paying back a flight you booked, for instance.
+// ============================================================
+
+let entries = [];
+let editingEntry = null;
+
+let moneyYear   = null;    // which tax year, or null for everything
+let moneyFilter = 'all';   // all | in | out | unsettled
+let moneyBasis  = 'all';   // all = as invoiced, settled = money actually moved
+
+async function loadEntries() {
+  if (!canInvoice) { entries = []; return; }
+
+  const { data, error } = await supabase
+    .from('entries')
+    .select('*')
+    .order('entry_date', { ascending: false });
+
+  if (error) {
+    entries = [];
+    el('molist').innerHTML = '<div class="error">Error: ' + escapeText(error.message) + '</div>';
+    return;
+  }
+  entries = data || [];
+}
+
+// ---- tax years ----
+// The UK tax year runs 6 April to 5 April. A date in, say, February 2027
+// belongs to the year that started in April 2026, which is the one your
+// spreadsheet calls 2026/27.
+
+function taxYearOf(iso) {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  return (m > 4 || (m === 4 && d >= 6)) ? y : y - 1;
+}
+
+function taxYearLabel(year) {
+  return year + '/' + String(year + 1).slice(2);
+}
+
+function currentTaxYear() {
+  return taxYearOf(todayISO());
+}
+
+// ---- one shape for both kinds of row ----
+
+// An invoice, seen as a line of income. Dated by when the money landed
+// where that's known, and by the issue date where it hasn't yet — which
+// is how your spreadsheet dates them too.
+function invoiceAsRow(inv) {
+  const first = ((inv.lines || [])[0] || {}).d || '';
+  const bits = [inv.client, first].filter(Boolean);
+
+  return {
+    key:         'inv:' + inv.id,
+    id:          inv.id,
+    kind:        'invoice',
+    date:        (inv.status === 'paid' && inv.paid_on) ? inv.paid_on : inv.issued_on,
+    direction:   'in',
+    amount:      Number(inv.total || 0),
+    category:    'shoot',
+    description: bits.length ? bits.join(' — ') : inv.number,
+    ref:         inv.number,
+    miles:       null,
+    settled:     inv.status === 'paid',
+    pendingWord: inv.status === 'draft' ? 'Draft' : 'Invoice pending'
+  };
+}
+
+function entryAsRow(entry) {
+  return {
+    key:         'ent:' + entry.id,
+    id:          entry.id,
+    kind:        'entry',
+    date:        entry.entry_date,
+    direction:   entry.direction,
+    amount:      Number(entry.amount || 0),
+    category:    entry.category || '',
+    description: entry.description || '',
+    ref:         entry.ref || '',
+    miles:       entry.miles == null ? null : Number(entry.miles),
+    settled:     entry.status === 'settled',
+    pendingWord: entry.direction === 'in' ? 'Awaiting payment' : 'To pay'
+  };
+}
+
+// Everything, newest first.
+function allMoneyRows() {
+  return invoices.map(invoiceAsRow)
+    .concat(entries.map(entryAsRow))
+    .sort((a, b) => (a.date === b.date ? (a.key < b.key ? 1 : -1) : (a.date < b.date ? 1 : -1)));
+}
+
+// What the chips are currently letting through.
+function visibleMoneyRows() {
+  return allMoneyRows().filter((r) => {
+    if (moneyYear != null && taxYearOf(r.date) !== moneyYear) return false;
+    if (moneyFilter === 'in'  && r.direction !== 'in')  return false;
+    if (moneyFilter === 'out' && r.direction !== 'out') return false;
+    if (moneyFilter === 'unsettled' && r.settled) return false;
+    if (moneyBasis === 'settled' && !r.settled) return false;
+    return true;
+  });
+}
+
+// ---- the figures at the top ----
+
+function renderMoney() {
+  if (!canInvoice) return;
+
+  buildYearChips();
+  buildMoneyChips();
+
+  // The totals ignore the direction chips — narrowing the list to money
+  // out shouldn't make it look as though nothing came in — but they do
+  // follow the tax year and the basis, because both change what the
+  // right answer is.
+  const forTotals = allMoneyRows().filter((r) => {
+    if (moneyYear != null && taxYearOf(r.date) !== moneyYear) return false;
+    if (moneyBasis === 'settled' && !r.settled) return false;
+    return true;
+  });
+
+  const sum = (rows) => rows.reduce((t, r) => t + r.amount, 0);
+  const inRows  = forTotals.filter((r) => r.direction === 'in');
+  const outRows = forTotals.filter((r) => r.direction === 'out');
+  const income  = sum(inRows);
+  const spent   = sum(outRows);
+
+  const waiting = allMoneyRows().filter((r) =>
+    (moneyYear == null || taxYearOf(r.date) === moneyYear) && !r.settled);
+  const owedIn  = sum(waiting.filter((r) => r.direction === 'in'));
+  const owedOut = sum(waiting.filter((r) => r.direction === 'out'));
+
+  el('m_in').textContent   = money(income);
+  el('m_in_sub').textContent = owedIn
+    ? money(owedIn) + ' not in yet' : inRows.length + (inRows.length === 1 ? ' entry' : ' entries');
+
+  el('m_out').textContent  = money(spent);
+  el('m_out_sub').textContent = owedOut
+    ? money(owedOut) + ' still to pay' : outRows.length + (outRows.length === 1 ? ' entry' : ' entries');
+
+  el('m_profit').textContent = money(income - spent);
+  el('m_profit_sub').textContent = moneyBasis === 'settled' ? 'money that moved' : 'as invoiced';
+
+  const miles = forTotals.reduce((t, r) => t + Number(r.miles || 0), 0);
+  el('m_miles').textContent = miles
+    ? Math.round(miles) + ' miles logged · ' + money(miles * MILEAGE_RATE) + ' at ' + Math.round(MILEAGE_RATE * 100) + 'p'
+    : 'No mileage logged.';
+
+  renderSuggested();
+  renderMoneyList();
+}
+
+function buildYearChips() {
+  // Every tax year that has something in it, plus this one even when it
+  // hasn't started filling up yet.
+  const years = new Set(allMoneyRows().map((r) => taxYearOf(r.date)));
+  years.add(currentTaxYear());
+
+  if (moneyYear === null && !years.has(null)) {
+    // first draw: land on the year we're in
+    moneyYear = currentTaxYear();
+  }
+
+  const list = Array.from(years).sort((a, b) => b - a);
+
+  el('yearchips').innerHTML = list.map((y) => `
+    <button type="button" class="chip${y === moneyYear ? ' on' : ''}" data-year="${y}">${taxYearLabel(y)}</button>`).join('')
+    + `<button type="button" class="chip${moneyYear === null ? ' on' : ''}" data-year="all">All years</button>`;
+}
+
+const MONEY_FILTERS = [
+  ['all', 'Everything'], ['in', 'Money in'], ['out', 'Money out'], ['unsettled', 'Outstanding']
+];
+
+function buildMoneyChips() {
+  el('mochips').innerHTML = MONEY_FILTERS.map(([value, text]) => `
+    <button type="button" class="chip${value === moneyFilter ? ' on' : ''}"
+            data-mo-filter="${escapeAttr(value)}">${escapeText(text)}</button>`).join('');
+
+  el('basischips').innerHTML = [['all', 'As invoiced'], ['settled', 'Settled only']]
+    .map(([value, text]) => `
+    <button type="button" class="chip${value === moneyBasis ? ' on' : ''}"
+            data-basis="${escapeAttr(value)}">${escapeText(text)}</button>`).join('');
+}
+
+el('yearchips').addEventListener('click', (event) => {
+  const chip = event.target.closest('button[data-year]');
+  if (!chip) return;
+  moneyYear = chip.dataset.year === 'all' ? null : Number(chip.dataset.year);
+  renderMoney();
+});
+
+el('mochips').addEventListener('click', (event) => {
+  const chip = event.target.closest('button[data-mo-filter]');
+  if (!chip || chip.dataset.moFilter === moneyFilter) return;
+  moneyFilter = chip.dataset.moFilter;
+  renderMoney();
+});
+
+el('basischips').addEventListener('click', (event) => {
+  const chip = event.target.closest('button[data-basis]');
+  if (!chip || chip.dataset.basis === moneyBasis) return;
+  moneyBasis = chip.dataset.basis;
+  renderMoney();
+});
+
+// ---- costs the tracker can work out for itself ----
+
+// A job that's been invoiced, that somebody else shot, has a fee owed to
+// whoever shot it. That fee is already on the shoot, so there's no point
+// making you type it again — this offers it, and you tap once to log it.
+//
+// It only ever suggests. Nothing is written until you press the button,
+// because a suggestion that files itself is a guess you can't audit.
+function suggestedCosts() {
+  if (!myTag) return [];
+
+  const invoiced = new Set();
+  invoices.forEach((inv) => (inv.shoot_ids || []).forEach((id) => invoiced.add(String(id))));
+
+  const logged = new Set(
+    entries.filter((e) => e.shoot_id && e.category === 'crew fee')
+           .map((e) => String(e.shoot_id))
+  );
+
+  return allShoots
+    .filter((s) => invoiced.has(String(s.id)))
+    .filter((s) => s.crew && s.crew !== myTag)
+    .filter((s) => s.fee != null && Number(s.fee) > 0)
+    .filter((s) => !logged.has(String(s.id)))
+    .sort(byDateAscending)
+    .reverse()
+    .slice(0, 8);
+}
+
+function renderSuggested() {
+  const rows = suggestedCosts();
+
+  if (!rows.length) {
+    el('suggestwrap').classList.add('hidden');
+    return;
+  }
+  el('suggestwrap').classList.remove('hidden');
+
+  el('suggest').innerHTML = rows.map((s) => {
+    const who = (crewEntry(s.crew) || {}).name || s.crew;
+    return `
+      <div class="mini" style="border-left-color:${crewColour(s.crew)}">
+        <div>
+          <div class="mv">${escapeText(who)}&rsquo;s fee ${crewTag(s.crew)}</div>
+          <div class="mm">${escapeText(s.venue)} &middot; ${longDate(s.shoot_date)} &middot; ${money(s.fee)}</div>
+        </div>
+        <button type="button" class="chip" data-log="${escapeAttr(s.id)}">Log it</button>
+      </div>`;
+  }).join('');
+}
+
+el('suggest').addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-log]');
+  if (!button) return;
+
+  const shoot = allShoots.find((s) => String(s.id) === String(button.dataset.log));
+  if (!shoot) return;
+
+  const who = (crewEntry(shoot.crew) || {}).name || shoot.crew;
+  button.textContent = '…';
+
+  const problem = await saveEntry({
+    entry_date:  shoot.shoot_date,
+    direction:   'out',
+    amount:      Number(shoot.fee),
+    category:    'crew fee',
+    description: who + ' fee — ' + shoot.venue + ', ' + dotDate(shoot.shoot_date),
+    status:      'pending',
+    shoot_id:    shoot.id
+  });
+
+  if (problem) {
+    button.textContent = 'Log it';
+    flash(problem);
+    return;
+  }
+  flash(who + '\u2019s fee of ' + money(shoot.fee) + ' logged as still to pay.');
+  refresh();
+});
+
+// ---- the list ----
+
+function renderMoneyList() {
+  const rows = visibleMoneyRows();
+
+  el('molabel').textContent = moneyYear == null ? 'All years' : taxYearLabel(moneyYear);
+  el('mocount').textContent = rows.length + (rows.length === 1 ? ' entry' : ' entries');
+
+  if (!rows.length) {
+    el('molist').innerHTML = '<div class="empty">Nothing in there yet.</div>';
+    return;
+  }
+
+  // Grouped by month, with the month's own two figures on the heading —
+  // which is the one thing your spreadsheet couldn't easily show you.
+  const months = [];
+  const seen = {};
+  rows.forEach((r) => {
+    const key = String(r.date).slice(0, 7);
+    if (!seen[key]) { seen[key] = []; months.push(key); }
+    seen[key].push(r);
+  });
+
+  el('molist').innerHTML = months.map((key) => {
+    const group = seen[key];
+    const [y, m] = key.split('-').map(Number);
+    const name = new Date(y, m - 1, 1)
+      .toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+
+    const inSum  = group.filter((r) => r.direction === 'in').reduce((t, r) => t + r.amount, 0);
+    const outSum = group.filter((r) => r.direction === 'out').reduce((t, r) => t + r.amount, 0);
+
+    return `
+      <div class="monthhead">
+        <span>${escapeText(name)}</span>
+        <span class="monthsum">
+          ${inSum ? '<b class="in">+' + money(inSum) + '</b>' : ''}
+          ${outSum ? '<b class="out">&minus;' + money(outSum) + '</b>' : ''}
+        </span>
+      </div>` + group.map(moneyRowHTML).join('');
+  }).join('');
+}
+
+function moneyRowHTML(row) {
+  const isIn = row.direction === 'in';
+  const colour = isIn
+    ? (row.settled ? 'var(--paid)' : 'var(--accent-4)')
+    : (row.settled ? 'var(--neutral)' : 'var(--stamp)');
+
+  const note = [
+    row.ref,
+    row.category ? titleCase(row.category) : '',
+    row.miles ? Math.round(row.miles) + ' miles' : ''
+  ].filter(Boolean).join(' · ');
+
+  // An invoice row can't be edited from here — the invoice is the
+  // original, and this is a view of it. The menu says so and offers the
+  // way through rather than a dead end.
+  const menu = row.kind === 'invoice'
+    ? `<div class="menu hidden">
+         <div class="error hidden"></div>
+         <p class="mnote">This comes from invoice ${escapeText(row.ref)}. Change it there and it changes here —
+            mark the invoice paid and this moves with it.</p>
+         <div class="chips">
+           <button type="button" class="chip" data-mact="goinv" data-id="${escapeAttr(row.id)}">Open in Invoices</button>
+         </div>
+       </div>`
+    : `<div class="menu hidden">
+         <div class="error hidden"></div>
+         <div class="label">Status</div>
+         <div class="chips">
+           <button type="button" class="chip${row.settled ? '' : ' on'}"
+                   data-mact="status" data-id="${escapeAttr(row.id)}" data-value="pending">${isIn ? 'Not in yet' : 'Still to pay'}</button>
+           <button type="button" class="chip${row.settled ? ' on' : ''}"
+                   data-mact="status" data-id="${escapeAttr(row.id)}" data-value="settled">${isIn ? 'Received' : 'Paid'}</button>
+         </div>
+         <div class="chips">
+           <button type="button" class="chip" data-mact="edit" data-id="${escapeAttr(row.id)}">Edit</button>
+           <button type="button" class="chip danger" data-mact="delete" data-id="${escapeAttr(row.id)}">Delete</button>
+         </div>
+       </div>`;
+
+  return `
+    <div class="shootwrap mo" style="border-left-color:${colour}">
+      <div class="shoot">
+        <div class="when">
+          <div class="date">${dotDate(row.date)}</div>
+          <div class="time">${escapeText(row.settled ? (isIn ? 'received' : 'paid') : row.pendingWord)}</div>
+        </div>
+        <div class="mid">
+          <div class="venue">${escapeText(row.description)}</div>
+          <div class="client">${escapeText(note) || '&mdash;'}</div>
+        </div>
+        <div class="end">
+          <div class="fee ${isIn ? 'in' : 'out'}">${isIn ? '+' : '&minus;'}${money2(row.amount)}</div>
+        </div>
+        <button type="button" class="dots" data-mact="menu" data-id="${escapeAttr(row.id)}"
+                aria-expanded="false" aria-label="Options">&#8942;</button>
+      </div>
+      ${menu}
+    </div>`;
+}
+
+el('molist').addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-mact]');
+  if (!button) return;
+
+  const id = button.dataset.id;
+  const wrap = button.closest('.shootwrap');
+  const menu = wrap.querySelector('.menu');
+  const act = button.dataset.mact;
+
+  if (act === 'menu') {
+    const wasOpen = !menu.classList.contains('hidden');
+    closeAllMenus();
+    if (!wasOpen) {
+      menu.classList.remove('hidden');
+      button.classList.add('open');
+      button.setAttribute('aria-expanded', 'true');
+    }
+    return;
+  }
+
+  if (act === 'goinv') {
+    closeAllMenus();
+    goto('invoices');
+    return;
+  }
+
+  const entry = entries.find((e) => String(e.id) === String(id));
+  if (!entry) return;
+
+  if (act === 'edit') {
+    startEditEntry(entry);
+    return;
+  }
+
+  if (act === 'status') {
+    const value = button.dataset.value;
+    if (entry.status === value) { closeAllMenus(); return; }
+
+    button.textContent = '…';
+    const problem = await changeEntry(id, { status: value });
+    if (problem) { menuError(menu, problem); return; }
+    refresh();
+    return;
+  }
+
+  if (act === 'delete') {
+    if (button.dataset.armed !== '1') {
+      button.dataset.armed = '1';
+      button.classList.add('armed');
+      button.textContent = 'Tap again to delete';
+      setTimeout(() => {
+        button.dataset.armed = '';
+        button.classList.remove('armed');
+        button.textContent = 'Delete';
+      }, 5000);
+      return;
+    }
+
+    button.textContent = 'Deleting…';
+    const { data, error } = await supabase
+      .from('entries').delete().eq('id', id).select('id');
+
+    if (error || !data || !data.length) {
+      button.dataset.armed = '';
+      button.classList.remove('armed');
+      button.textContent = 'Delete';
+      menuError(menu, error ? error.message : 'The database refused that.');
+      return;
+    }
+    if (editingEntry && String(editingEntry.id) === String(id)) closeEntryForm();
+    flash('That entry has gone.');
+    refresh();
+  }
+});
+
+async function changeEntry(id, patch) {
+  const { data, error } = await supabase
+    .from('entries').update(patch).eq('id', id).select('id');
+
+  if (error) return error.message;
+  if (!data || !data.length) {
+    return 'Nothing changed — the database refused it. That usually means this account isn\'t set up for the money side.';
+  }
+  return null;
+}
+
+async function saveEntry(row) {
+  if (teamId) row.team_id = teamId;
+  const { data, error } = await supabase.from('entries').insert(row).select('id');
+  if (error) return error.message;
+  if (!data || !data.length) return 'The database refused that.';
+  return null;
+}
+
+// ---- adding and editing an entry ----
+
+function fillCategorySelect() {
+  const list = el('f_e_dir').value === 'in' ? IN_CATEGORIES : OUT_CATEGORIES;
+  fillSelect('f_e_cat', list);
+}
+
+function openEntryForm(direction) {
+  editingEntry = null;
+  closeAllMenus();
+  hide('entryerror');
+  hide('flash');
+
+  el('newentry').reset();
+  el('f_e_dir').value = direction || 'out';
+  fillCategorySelect();
+  el('f_e_date').value = todayISO();
+  el('f_e_status').value = 'settled';
+  el('f_e_miles').value = '';
+
+  el('entrytitle').textContent = direction === 'in' ? 'Add money in' : 'Add money out';
+  el('saveentry').textContent = 'Save entry';
+  show('newentry');
+  el('f_e_amount').focus();
+}
+
+function startEditEntry(entry) {
+  editingEntry = entry;
+  closeAllMenus();
+  hide('entryerror');
+  hide('flash');
+
+  el('newentry').reset();
+  el('f_e_dir').value = entry.direction;
+  fillCategorySelect();
+
+  el('f_e_date').value   = entry.entry_date;
+  el('f_e_amount').value = entry.amount;
+  el('f_e_desc').value   = entry.description || '';
+  el('f_e_ref').value    = entry.ref || '';
+  el('f_e_miles').value  = entry.miles == null ? '' : entry.miles;
+  el('f_e_status').value = entry.status;
+  setSelect('f_e_cat', entry.category);
+
+  el('entrytitle').textContent = 'Edit entry';
+  el('saveentry').textContent = 'Save changes';
+  show('newentry');
+  el('newentry').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function closeEntryForm() {
+  editingEntry = null;
+  hide('newentry');
+}
+
+el('addin').addEventListener('click', () => openEntryForm('in'));
+el('addout').addEventListener('click', () => openEntryForm('out'));
+el('cancelentry').addEventListener('click', closeEntryForm);
+el('f_e_dir').addEventListener('change', fillCategorySelect);
+
+// Typing miles with the amount left empty prices them for you. Type an
+// amount yourself and it's left alone — a toll isn't 45p a mile.
+el('f_e_miles').addEventListener('input', () => {
+  const miles = Number(el('f_e_miles').value || 0);
+  if (miles > 0 && el('f_e_amount').value.trim() === '') {
+    el('f_e_amount').value = (miles * MILEAGE_RATE).toFixed(2);
+  }
+});
+
+el('newentry').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  hide('entryerror');
+
+  const date   = el('f_e_date').value;
+  const amount = el('f_e_amount').value.trim();
+  const desc   = el('f_e_desc').value.trim();
+
+  if (!date || amount === '' || !desc) {
+    el('entryerror').textContent = 'A date, an amount and a description are needed before this can be saved.';
+    show('entryerror');
+    return;
+  }
+
+  const miles = el('f_e_miles').value.trim();
+
+  const row = {
+    entry_date:  date,
+    direction:   el('f_e_dir').value,
+    amount:      Number(amount),
+    category:    el('f_e_cat').value,
+    description: desc,
+    ref:         el('f_e_ref').value.trim() || null,
+    miles:       miles === '' ? null : Number(miles),
+    status:      el('f_e_status').value
+  };
+
+  el('saveentry').disabled = true;
+  el('saveentry').textContent = 'Saving…';
+
+  const problem = editingEntry
+    ? await changeEntry(editingEntry.id, row)
+    : await saveEntry(row);
+
+  el('saveentry').disabled = false;
+  el('saveentry').textContent = editingEntry ? 'Save changes' : 'Save entry';
+
+  if (problem) {
+    el('entryerror').textContent = problem;
+    show('entryerror');
+    return;
+  }
+
+  const wasEdit = !!editingEntry;
+  closeEntryForm();
+  flash(wasEdit ? 'Entry updated.' : 'Entry added to the tracker.');
+  refresh();
+});
+
+// ---- out to a spreadsheet ----
+//
+// Same six columns as the sheet you've been keeping, so it opens looking
+// like the thing you're used to and your accountant doesn't have to be
+// told anything new.
+
+function csvCell(value) {
+  return '"' + String(value == null ? '' : value).replace(/"/g, '""') + '"';
+}
+
+el('downloadcsv').addEventListener('click', () => {
+  const rows = visibleMoneyRows();
+  if (!rows.length) { flash('Nothing to export in that view.'); return; }
+
+  const head = ['DATE', 'INCOME', 'EXPENDITURE', 'MILEAGE', 'DESCRIPTION', 'STATUS'];
+
+  const body = rows.map((r) => [
+    dotDate(r.date),
+    r.direction === 'in'  ? r.amount.toFixed(2) : '',
+    r.direction === 'out' ? r.amount.toFixed(2) : '',
+    r.miles == null ? '' : Math.round(r.miles),
+    [r.ref, r.description].filter(Boolean).join(' - '),
+    r.settled ? 'Paid' : (r.direction === 'in' ? 'Invoice pending' : 'To be paid')
+  ]);
+
+  const totalIn  = rows.filter((r) => r.direction === 'in').reduce((t, r) => t + r.amount, 0);
+  const totalOut = rows.filter((r) => r.direction === 'out').reduce((t, r) => t + r.amount, 0);
+  const miles    = rows.reduce((t, r) => t + Number(r.miles || 0), 0);
+
+  body.push([]);
+  body.push(['', totalIn.toFixed(2), totalOut.toFixed(2), Math.round(miles), 'TOTALS', '']);
+  body.push(['', '', (miles * MILEAGE_RATE).toFixed(2), '', 'TOTAL MILEAGE COST', '']);
+  body.push(['', '', (totalIn - totalOut).toFixed(2), '', 'PROFIT', '']);
+
+  // The BOM is what stops Excel mangling the pound signs.
+  const csv = '\ufeff' + [head].concat(body)
+    .map((cols) => cols.map(csvCell).join(',')).join('\r\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.download = safeFilename('BGL Media I&E '
+    + (moneyYear == null ? 'all years' : taxYearLabel(moneyYear))) + '.csv';
+  link.click();
+
+  URL.revokeObjectURL(url);
 });
 
 // ============================================================
