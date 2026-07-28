@@ -115,7 +115,7 @@ const KIT_CATEGORIES = [
 // This only decides what the menu offers. kit.sql is what actually
 // refuses — same arrangement as invoices and the money tracker.
 // ============================================================
-const KIT_ROLES = ['bgl', 'videographer'];
+const KIT_ROLES = ['bgl', 'videographer', 'staff'];
 
 // ============================================================
 // EDIT THESE. The email each of you signs in with, and the tag the form
