@@ -496,6 +496,127 @@
 
     </section>
 
+    <!-- ============ OUTREACH ============ -->
+    <!-- The cold list. One row per business, grouped by where the
+         conversation has got to, so the screen reads top to bottom as a
+         pipeline: still to write, waiting, replied, booked.
+
+         Hidden from anyone whose profile role isn't on the list in app.js.
+         Hiding it is only tidiness — outreach.sql is what actually refuses. -->
+    <section id="screen-outreach" class="screen hidden">
+
+      <div class="tally">
+        <div>
+          <div class="label">To write</div>
+          <div class="fig" id="o_todo">&mdash;</div>
+          <div class="sub" id="o_todo_sub"></div>
+        </div>
+        <div>
+          <div class="label">Waiting</div>
+          <div class="fig" id="o_wait">&mdash;</div>
+          <div class="sub" id="o_wait_sub"></div>
+        </div>
+        <div>
+          <div class="label">Booked</div>
+          <div class="fig" id="o_won">&mdash;</div>
+          <div class="sub" id="o_won_sub"></div>
+        </div>
+      </div>
+
+      <div class="chasenote hidden" id="o_chase"></div>
+
+      <!-- The message itself. One per sort of business, kept in app.js so
+           there's one copy of each and not one per row. -->
+      <div class="label">The message</div>
+      <div class="chips" id="msgchips"></div>
+      <div class="msgbox" id="msgbox"></div>
+      <div class="pair">
+        <div id="copywrap"><button type="button" class="quiet" id="copymsg">Copy the message</button></div>
+        <div><button type="button" class="quiet" id="hidemsg">Put it away</button></div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <button id="openreach">Add a business</button>
+
+      <form id="newreach" class="hidden">
+        <div class="formtitle" id="reachtitle">Add a business</div>
+        <div id="reacherror" class="error hidden"></div>
+
+        <div class="label">Business</div>
+        <input type="text" id="f_o_name" autocomplete="off" required
+               placeholder="Ocean Plaza">
+
+        <div class="pair">
+          <div>
+            <div class="label">What they are</div>
+            <select id="f_o_kind"></select>
+          </div>
+          <div>
+            <div class="label">Where</div>
+            <input type="text" id="f_o_area" autocomplete="off" placeholder="Southport">
+          </div>
+        </div>
+
+        <div class="label">Who you're writing to</div>
+        <input type="text" id="f_o_contact" autocomplete="off"
+               placeholder="Name, if you've got one">
+
+        <div class="pair">
+          <div>
+            <div class="label">Email</div>
+            <input type="email" id="f_o_email" autocomplete="off">
+          </div>
+          <div>
+            <div class="label">Phone</div>
+            <input type="text" id="f_o_phone" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="label">Notes</div>
+        <input type="text" id="f_o_notes" autocomplete="off"
+               placeholder="Who you spoke to, what they said, when to try again">
+
+        <div class="label">Where it's got to</div>
+        <select id="f_o_status"></select>
+
+        <div class="pair">
+          <div>
+            <div class="linelabel">Written on</div>
+            <input type="date" id="f_o_sent">
+          </div>
+          <div>
+            <div class="linelabel">Chase on</div>
+            <input type="date" id="f_o_chase">
+          </div>
+        </div>
+
+        <button type="submit" id="savereach">Save business</button>
+        <div style="height:8px"></div>
+        <button type="button" class="quiet danger hidden" id="deletereach">Delete this business</button>
+        <div style="height:8px"></div>
+        <button type="button" class="quiet" id="cancelreach">Cancel</button>
+        <div style="height:10px"></div>
+      </form>
+
+      <div class="filters">
+        <input type="search" id="oq" placeholder="Search business, contact or notes" autocomplete="off">
+        <div class="chips" id="okindchips"></div>
+        <div class="chips" id="ostatuschips"></div>
+      </div>
+
+      <div class="listhead">
+        <span class="label" id="olabel" style="margin:0">Everyone</span>
+        <span class="count" id="ocount"></span>
+      </div>
+
+      <div id="olist"></div>
+
+      <div class="spacer"></div>
+      <button type="button" class="quiet" id="downloadreachcsv">Download the list as a spreadsheet</button>
+
+    </section>
+
     <!-- ============ ACCOUNT ============ -->
     <section id="screen-more" class="screen hidden">
 
@@ -508,7 +629,7 @@
       <div class="spacer"></div>
 
       <div class="label">Later</div>
-      <p style="color:var(--ink2)">Client contacts will live behind the More menu next to Kit. Nothing is listed until it's built &mdash; a menu of things that don't work is worse than a short menu.</p>
+      <p style="color:var(--ink2)">Outreach holds the businesses you haven't worked with yet. Contact details for the ones you have will join it behind the More menu. Nothing is listed until it's built &mdash; a menu of things that don't work is worse than a short menu.</p>
 
     </section>
 
@@ -537,6 +658,11 @@
       <button type="button" class="mi hidden" id="mi_kit" data-go="kit">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8.5h4L8.5 6h7L17 8.5h4v11H3z"/><circle cx="12" cy="13.5" r="3.4"/></svg>
         <span>Kit</span>
+      </button>
+
+      <button type="button" class="mi hidden" id="mi_outreach" data-go="outreach">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v12H3z"/><path d="M3 6.5l9 6.5 9-6.5"/></svg>
+        <span>Outreach</span>
       </button>
 
       <button type="button" class="mi" data-go="more">

@@ -662,6 +662,98 @@ table.sheet tr.stedit .error { margin: 10px 0 0; }
 .kit .kval.none { color: var(--ink3); }
 
 /* ============================================================
+   Outreach
+   ============================================================
+
+   Same two-colour trick as Kit, with the axes swapped. On Kit the
+   heading is what a thing is and the edge is whose it is. Here the
+   heading is how far the conversation has got and the edge is what
+   sort of business it is — so the list reads as a pipeline down the
+   page and as a sector across it, without either needing a legend.
+
+   The message sits above the list rather than inside each row,
+   because there's one of it and forty of them. */
+
+#newreach { border: 1px solid var(--ink); padding: 16px 16px 6px; margin-bottom: 20px; }
+#openreach { margin-bottom: 20px; }
+#screen-outreach .filters { margin-top: 20px; }
+#screen-outreach .pair { margin-top: 10px; }
+#screen-outreach .pair button { margin: 0; }
+
+/* The line that only turns up when something is actually due. */
+.chasenote {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--stamp);
+  border-left: var(--edge) solid var(--stamp);
+  background: var(--card); padding: 9px 11px; margin: -8px 0 20px;
+  line-height: 1.4;
+}
+
+/* What you're about to send, shown as a letter rather than as a form
+   field — it's read far more often than it's edited, and the editing
+   happens in app.js. */
+.msgbox {
+  background: var(--sheet); border: 1px solid var(--rule);
+  padding: 14px 15px; margin-bottom: 12px;
+}
+.msgsub {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink3);
+  padding-bottom: 9px; margin-bottom: 11px; border-bottom: 1px solid var(--rule);
+}
+.msgbody {
+  font-size: 13.5px; line-height: 1.55; color: var(--ink);
+  white-space: pre-wrap;
+}
+
+.orow { display: flex; gap: 12px; padding: 12px; align-items: flex-start; }
+.shootwrap.oitem:hover { background: var(--paper); }
+.orow .mid { flex: 1; min-width: 0; cursor: pointer; }
+.orow .oname { font-size: 15px; font-weight: 600; line-height: 1.25; }
+.orow .ometa { font-size: 13px; color: var(--ink2); margin-top: 3px; word-break: break-word; }
+.orow .onote { font-size: 13px; color: var(--ink2); margin-top: 3px; }
+.orow .okind {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink3); margin-top: 5px;
+}
+.orow .end {
+  display: flex; flex-direction: column; align-items: flex-end;
+  gap: 6px; min-width: 96px; text-align: right;
+}
+
+/* The status pill carries its own colour inline, so it only needs the
+   words to wrap rather than stretch the row. */
+.orow .pill.st { white-space: normal; max-width: 96px; text-align: right; line-height: 1.35; }
+
+/* Write is the one you press forty times. It's the plain one on
+   purpose — a row where both buttons shout has no first move. */
+.orow button.pill.write { color: var(--ink2); border-color: var(--ink2); }
+.orow button.pill.write:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+.orow .owhen {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--ink3);
+}
+.orow .owhen.due { color: var(--stamp); }
+
+/* The row of words that opens under a business when you tap its pill. */
+.omenu .label { margin-bottom: 8px; }
+.omenu .chips { margin-bottom: 10px; }
+
+/* ---- phones ----
+   Two pills and a date won't sit beside a business name on a narrow
+   screen, so below this width the right-hand column goes under the
+   name and lays itself out along the bottom of the row instead. */
+@media (max-width: 420px) {
+  .orow { flex-wrap: wrap; }
+  .orow .end {
+    flex-direction: row; align-items: center; justify-content: flex-start;
+    flex-wrap: wrap; width: 100%; text-align: left; margin-top: 4px;
+  }
+  .orow .pill.st { max-width: none; text-align: center; }
+}
+
+/* ============================================================
    Width
    ============================================================
 

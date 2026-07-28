@@ -118,6 +118,191 @@ const KIT_CATEGORIES = [
 const KIT_ROLES = ['bgl', 'videographer', 'staff'];
 
 // ============================================================
+// Outreach — what sort of business you're writing to.
+//
+// Same rules as everything else on this page: `value` is what gets
+// stored, so once you've used a word don't rename it, add a new line
+// instead. `accent` names a slot in the palette at the top of
+// styles.css and is the colour down the left edge of the row. `hint`
+// is what the dropdown reads out.
+//
+// The order of this list is the order the chips come across the screen.
+// Every one of these needs a matching message in OUTREACH_MESSAGES
+// below — if you add a line here and forget the message, the screen
+// falls back to the 'other' one rather than showing you nothing.
+// ============================================================
+const OUTREACH_KINDS = [
+  { value: 'estate agent', word: 'Estate agents',  hint: 'listings, walkthroughs, drone',      accent: '--accent-1' },
+  { value: 'restaurant',   word: 'Restaurants',    hint: 'food, room, launch nights',          accent: '--accent-2' },
+  { value: 'shop',         word: 'Shops',          hint: 'product, window, seasonal',          accent: '--accent-3' },
+  { value: 'bar',          word: 'Bars & cafés',   hint: 'atmosphere, events, reels',          accent: '--accent-4' },
+  { value: 'gym',          word: 'Gyms & studios', hint: 'classes, coaches, member stories',   accent: '--accent-5' },
+  { value: 'trade',        word: 'Trades',         hint: 'before-and-afters, site work',       accent: '--accent-6' },
+  { value: 'venue',        word: 'Venues',         hint: 'weddings, corporate, hire',          accent: '--status-blue' },
+  { value: 'other',        word: 'Other',          hint: 'anything that doesn’t fit above',    accent: '--neutral' }
+];
+
+// ============================================================
+// How far along each conversation is.
+//
+// `stage` is the only part the three figures at the top care about:
+// 'todo' is written down but not written to, 'live' is a conversation
+// in progress, 'done' is finished either way. Everything else here is
+// the wording on top of that, same arrangement as the money tracker's
+// labels, so you can add or rename freely without a figure going wrong.
+//
+// `chase` marks the two states that are waiting on somebody else. Those
+// are the ones that get a chase date set for them, and the ones the
+// strip under the figures counts.
+//
+// The order of this list is the order the list groups down the screen,
+// so it reads as a pipeline: still to write at the top, booked at the
+// bottom.
+// ============================================================
+const OUTREACH_STATES = [
+  { value: 'to_contact', word: 'To contact',     stage: 'todo', tone: '--neutral' },
+  { value: 'sent',       word: 'Sent',           stage: 'live', tone: '--accent-4', chase: true },
+  { value: 'chased',     word: 'Chased',         stage: 'live', tone: '--accent-5', chase: true },
+  { value: 'replied',    word: 'Replied',        stage: 'live', tone: '--status-blue' },
+  { value: 'meeting',    word: 'Meeting booked', stage: 'live', tone: '--status-plum' },
+  { value: 'won',        word: 'Booked a job',   stage: 'done', tone: '--paid' },
+  { value: 'no',         word: 'No thanks',      stage: 'done', tone: '--ink3' }
+];
+
+// How long to leave it before the list starts asking you to chase.
+// Seven days is long enough not to be a nuisance and short enough that
+// they haven't forgotten who you are.
+const FOLLOW_UP_DAYS = 7;
+
+// ============================================================
+// EDIT THESE. What you actually send.
+//
+// One message per sort of business. {business} and {hello} are filled
+// in from the row when you press Write — {hello} becomes 'Hi Sarah' if
+// you've got a name on the row and plain 'Hello' if you haven't, so a
+// row with no name still reads properly.
+//
+// Don't sign these off. Your name, the company and your number are
+// added underneath from ME at the top of this file, so changing your
+// phone number changes it in seven messages at once rather than none.
+// ============================================================
+const OUTREACH_MESSAGES = {
+  'estate agent': {
+    subject: 'Video walkthroughs for {business}',
+    body:
+      '{hello},\n\n' +
+      'I\'m a videographer based in Southport. I shoot property walkthroughs and '
+      + 'drone footage for agents around the North West — the sort of thing that '
+      + 'gets a listing watched rather than scrolled past.\n\n'
+      + 'Most agents I work with book a half day and come away with a walkthrough, '
+      + 'a short social cut and stills, all edited and back within a few days.\n\n'
+      + 'If you\'ve got a property coming up that\'s worth the effort, I\'d be glad '
+      + 'to show you what that looks like. Happy to send a couple of recent ones over.'
+  },
+
+  restaurant: {
+    subject: 'Food and room video for {business}',
+    body:
+      '{hello},\n\n'
+      + 'I\'m a videographer based in Southport. I film for restaurants and bars — '
+      + 'the food, the room when it\'s full, and the short vertical cuts that do the '
+      + 'work on Instagram and TikTok.\n\n'
+      + 'It\'s usually one quiet afternoon and one service, and it gives you enough '
+      + 'to post from for a couple of months rather than a single video.\n\n'
+      + 'If that\'s something you\'ve been meaning to sort out, I\'d be happy to send '
+      + 'over a few examples and what it would cost.'
+  },
+
+  shop: {
+    subject: 'Video for {business}',
+    body:
+      '{hello},\n\n'
+      + 'I\'m a videographer based in Southport, working with independent shops on '
+      + 'product and window video — short pieces for social, and something longer '
+      + 'for the website if it\'s wanted.\n\n'
+      + 'It tends to work best around something that\'s already happening: a new '
+      + 'range, a refit, the run-up to Christmas.\n\n'
+      + 'If you\'ve got something coming up, I\'d be glad to talk it through. I can '
+      + 'send a few examples over first if that\'s easier.'
+  },
+
+  bar: {
+    subject: 'Video for {business}',
+    body:
+      '{hello},\n\n'
+      + 'I\'m a videographer based in Southport. I film for bars and cafés — the '
+      + 'room on a good night, drinks close up, and short vertical cuts for social.\n\n'
+      + 'Usually it\'s one evening\'s filming, and it gives you enough to post from '
+      + 'for months rather than one video that\'s done by the weekend.\n\n'
+      + 'If you\'ve got an event or a new menu coming up, I\'d be happy to send some '
+      + 'examples and a price over.'
+  },
+
+  gym: {
+    subject: 'Video for {business}',
+    body:
+      '{hello},\n\n'
+      + 'I\'m a videographer based in Southport. I work with gyms and studios on '
+      + 'class footage, coach introductions and member stories — the pieces that '
+      + 'show somebody what walking in actually feels like.\n\n'
+      + 'It\'s usually a morning\'s filming around your normal timetable, so nothing '
+      + 'has to be staged or stopped.\n\n'
+      + 'If you\'re working on sign-ups for the new year or a new class, I\'d be glad '
+      + 'to send over some examples.'
+  },
+
+  trade: {
+    subject: 'Video for {business}',
+    body:
+      '{hello},\n\n'
+      + 'I\'m a videographer based in Southport. I film for trades and builders — '
+      + 'before-and-afters, site work and short pieces for social. Good work is '
+      + 'hard to sell in photographs and easy to sell in video.\n\n'
+      + 'It can be done in a couple of visits around a job you\'re already on, so it '
+      + 'doesn\'t cost you a day.\n\n'
+      + 'If you\'ve got a project worth showing off, I\'d be happy to talk it through.'
+  },
+
+  venue: {
+    subject: 'Video for {business}',
+    body:
+      '{hello},\n\n'
+      + 'I\'m a videographer based in Southport, working with venues on the films '
+      + 'that get enquiries in — the space dressed for a wedding, a corporate day '
+      + 'running, and short cuts for social and the website.\n\n'
+      + 'I also shoot on the day for couples and companies booking with you, which '
+      + 'some venues like to be able to recommend.\n\n'
+      + 'If it\'s worth a conversation, I\'d be glad to send examples and prices over.'
+  },
+
+  other: {
+    subject: 'Video for {business}',
+    body:
+      '{hello},\n\n'
+      + 'I\'m a videographer based in Southport. I work with businesses around the '
+      + 'North West on short video for social and websites — filmed, edited and '
+      + 'back with you inside a week.\n\n'
+      + 'If it\'s something you\'ve been meaning to get sorted, I\'d be happy to send '
+      + 'over a few examples and what it would cost.'
+  }
+};
+
+// ============================================================
+// Who gets the Outreach screen. Matched against the `role` on a profile
+// the same way KIT_ROLES is, ignoring capitals and spare spaces. An
+// owner always gets it whatever their role says.
+//
+// Left as just 'bgl' on purpose: who you're chasing, what you're
+// quoting and who's said no is your business development, and it isn't
+// obviously Jerome's to read. Add 'videographer' to this line if you'd
+// rather it were shared — that's the whole change.
+//
+// This only decides what the menu offers. outreach.sql is what actually
+// refuses — same arrangement as invoices, money and kit.
+// ============================================================
+const OUTREACH_ROLES = ['bgl'];
+
+// ============================================================
 // EDIT THESE. The email each of you signs in with, and the tag the form
 // should pick by default. Purely a convenience — it saves a tap, it does
 // not stop anyone tagging a job to anyone.
@@ -170,6 +355,11 @@ let canInvoice = false;
 // Am I allowed to see the kit list? Worked out from the role on my
 // profile against KIT_ROLES above. Same story again: kit.sql is the lock.
 let canKit = false;
+
+// Am I allowed to see the outreach list? Worked out from the role on my
+// profile against OUTREACH_ROLES above. Same story again: outreach.sql
+// is the lock.
+let canOutreach = false;
 
 // shoot_id -> { actual_fee, shared }. For a non-owner this only ever holds
 // the jobs that have been unlocked, because the rest never arrive.
@@ -422,13 +612,14 @@ function flash(message) {
 
 // ---- which screen is showing ----
 
-const SCREENS = ['home', 'shoots', 'calendar', 'invoices', 'money', 'kit', 'more'];
+const SCREENS = ['home', 'shoots', 'calendar', 'invoices', 'money', 'kit', 'outreach', 'more'];
 
-// Invoices, Money, Kit and Account all live behind the More menu, so all
-// four light up the More tab. Everything else lights up its own.
+// Invoices, Money, Kit, Outreach and Account all live behind the More
+// menu, so all five light up the More tab. Everything else lights up
+// its own.
 const TAB_FOR = {
   home: 'home', shoots: 'shoots', calendar: 'calendar',
-  invoices: 'more', money: 'more', kit: 'more', more: 'more'
+  invoices: 'more', money: 'more', kit: 'more', outreach: 'more', more: 'more'
 };
 
 function goto(name) {
@@ -507,6 +698,7 @@ async function loadProfile(userId) {
   isOwner = false;
   canInvoice = false;
   canKit = false;
+  canOutreach = false;
 
   const { data } = await supabase
     .from('profiles')
@@ -518,6 +710,7 @@ async function loadProfile(userId) {
     teamId = data.team_id || null;
     canInvoice = data.can_invoice === true;
     canKit = KIT_ROLES.includes(String(data.role || '').trim().toLowerCase());
+    canOutreach = OUTREACH_ROLES.includes(String(data.role || '').trim().toLowerCase());
     el('whoname').textContent = data.full_name || '';
     el('whotitle').textContent = data.title || data.role || '';
   }
@@ -528,8 +721,10 @@ async function loadProfile(userId) {
   const owner = await supabase.rpc('is_team_owner');
   isOwner = owner.data === true;
 
-  // An owner always gets the kit list, whatever their role happens to say.
+  // An owner always gets the kit list and the outreach list, whatever
+  // their role happens to say.
   if (isOwner) canKit = true;
+  if (isOwner) canOutreach = true;
 
   el('clientfee').classList.toggle('hidden', !isOwner);
   el('feelabel').innerHTML = isOwner ? 'Fee on schedule &pound;' : 'Fee &pound;';
@@ -537,6 +732,7 @@ async function loadProfile(userId) {
   el('mi_invoices').classList.toggle('hidden', !canInvoice);
   el('mi_money').classList.toggle('hidden', !canInvoice);
   el('mi_kit').classList.toggle('hidden', !canKit);
+  el('mi_outreach').classList.toggle('hidden', !canOutreach);
 }
 
 function fillSelect(id, values) {
@@ -595,7 +791,9 @@ const COLUMNS = 'id, shoot_date, call_time, venue, client, fee, job_type, status
 // the schedule fee where the client fee belongs and then corrects itself.
 async function refresh() {
   await loadFees();
-  await Promise.all([loadAll(), loadShoots(), loadInvoices(), loadEntries(), loadKit()]);
+  await Promise.all([
+    loadAll(), loadShoots(), loadInvoices(), loadEntries(), loadKit(), loadOutreach()
+  ]);
 
   // The tracker reads invoices and entries together, so it draws once both
   // have landed rather than twice, half-finished.
@@ -3381,6 +3579,746 @@ el('downloadkitcsv').addEventListener('click', () => {
 
   link.href = url;
   link.download = safeFilename('BGL Media kit list ' + todayISO()) + '.csv';
+  link.click();
+
+  URL.revokeObjectURL(url);
+});
+
+// ============================================================
+// Outreach
+//
+// A list of businesses you haven't worked with yet, grouped by how far
+// the conversation has got. The screen reads top to bottom as a
+// pipeline — still to write at the top, booked at the bottom — because
+// the question you actually open it with is 'who's next', and that
+// wants answering without a filter being touched.
+//
+// The message lives in OUTREACH_MESSAGES at the top of this file, one
+// per sort of business, so writing to the fortieth restaurant is the
+// same one tap as the first. Pressing Write on a row opens your mail
+// app with it already filled in and moves the row on, because a tracker
+// you have to update by hand after every send is a tracker that goes
+// stale by Thursday.
+//
+// Nothing in here can be reached by anyone whose profile role isn't on
+// OUTREACH_ROLES at the top of this file. Hiding the menu item is
+// tidiness; outreach.sql is what actually refuses.
+// ============================================================
+
+let reach = [];
+
+let reachKind = 'any';
+let reachState = 'any';
+let reachSearch = '';
+
+const REACH_COLUMNS = 'id, name, kind, area, contact, email, phone, notes, '
+                    + 'status, sent_on, chase_on';
+
+function reachKindEntry(value) {
+  return OUTREACH_KINDS.find((k) => k.value === value) || null;
+}
+
+// The word for a sort we've since deleted from the list is the word
+// itself, tidied up — same as a job type that's been renamed.
+function reachKindWord(value) {
+  const entry = reachKindEntry(value);
+  return entry ? entry.word : titleCase(value || 'other');
+}
+
+function reachKindColour(value) {
+  const entry = reachKindEntry(value);
+  return entry ? `var(${entry.accent})` : 'var(--ink3)';
+}
+
+function reachStateEntry(value) {
+  return OUTREACH_STATES.find((s) => s.value === value) || null;
+}
+
+function reachStateWord(value) {
+  const entry = reachStateEntry(value);
+  return entry ? entry.word : titleCase(value || 'to contact');
+}
+
+function reachStateTone(value) {
+  const entry = reachStateEntry(value);
+  return entry ? entry.tone : '--ink3';
+}
+
+// Waiting on somebody else, and the date you said you'd chase has come
+// round. A row with no chase date on it is never due — an empty date is
+// you saying you'll deal with it, not the app deciding for you.
+function chaseDue(row) {
+  const entry = reachStateEntry(row.status);
+  if (!entry || !entry.chase || !row.chase_on) return false;
+  return daysUntil(row.chase_on) <= 0;
+}
+
+async function loadOutreach() {
+  // Asking at all would only ever come back empty, and an error box on
+  // a screen you can't open isn't worth drawing.
+  if (!canOutreach) {
+    reach = [];
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from('outreach')
+    .select(REACH_COLUMNS)
+    .order('name', { ascending: true });
+
+  if (error) {
+    reach = [];
+    el('olist').innerHTML = '<div class="error">Error: ' + escapeText(error.message) + '</div>';
+    el('ocount').textContent = '';
+    return;
+  }
+
+  reach = data || [];
+  renderOutreach();
+}
+
+// ---- the message ----
+
+// 'Hi Sarah' if there's a name on the row, plain 'Hello' if there
+// isn't. A first name only, because 'Hi Sarah Bell' reads like a bank.
+function greeting(row) {
+  const name = String((row && row.contact) || '').trim();
+  return name ? 'Hi ' + name.split(/\s+/)[0] : 'Hello';
+}
+
+// Your sign-off, built from ME at the top of this file so there's one
+// copy of your phone number rather than seven.
+function signOff() {
+  return '\n\nBest,\n' + ME.name + '\n' + ME.company + '\n' + ME.phone;
+}
+
+// The message for one row, filled in. Pass nothing and you get the
+// sample the panel at the top of the screen shows, with the gaps left
+// visible so you can see what's about to be substituted.
+function messageFor(kind, row) {
+  const template = OUTREACH_MESSAGES[kind] || OUTREACH_MESSAGES.other;
+
+  const business = row ? String(row.name || '') : '[business name]';
+  const hello    = row ? greeting(row) : 'Hello';
+
+  const fill = (text) => String(text)
+    .split('{business}').join(business)
+    .split('{hello}').join(hello);
+
+  return {
+    subject: fill(template.subject),
+    body:    fill(template.body) + signOff()
+  };
+}
+
+let msgKind = OUTREACH_KINDS[0].value;
+let msgOpen = true;
+
+function renderMessage() {
+  el('msgchips').innerHTML = OUTREACH_KINDS.map((k) => `
+    <button type="button" class="chip${k.value === msgKind ? ' on' : ''}"
+            data-msg-kind="${escapeAttr(k.value)}">${escapeText(k.word)}</button>`).join('');
+
+  const note = messageFor(msgKind, null);
+
+  el('msgbox').innerHTML = `
+    <div class="msgsub">${escapeText(note.subject)}</div>
+    <div class="msgbody">${escapeText(note.body)}</div>`;
+
+  el('msgbox').classList.toggle('hidden', !msgOpen);
+  el('copywrap').classList.toggle('hidden', !msgOpen);
+  el('hidemsg').textContent = msgOpen ? 'Put it away' : 'Show the message';
+}
+
+el('msgchips').addEventListener('click', (event) => {
+  const chip = event.target.closest('button[data-msg-kind]');
+  if (!chip) return;
+  msgKind = chip.dataset.msgKind;
+  msgOpen = true;
+  renderMessage();
+});
+
+el('hidemsg').addEventListener('click', () => {
+  msgOpen = !msgOpen;
+  renderMessage();
+});
+
+el('copymsg').addEventListener('click', async () => {
+  const note = messageFor(msgKind, null);
+  const text = note.subject + '\n\n' + note.body;
+
+  try {
+    await navigator.clipboard.writeText(text);
+    flash('Copied. The gaps in square brackets still need filling in by hand.');
+  } catch (e) {
+    // Some browsers only allow this over https, and a silent failure
+    // would have you pasting whatever was on the clipboard before.
+    flash('This browser wouldn’t let me copy it. Select it and copy by hand.');
+  }
+});
+
+// ---- what the filters leave ----
+
+function visibleOutreach() {
+  const needle = reachSearch.trim().toLowerCase();
+
+  return reach.filter((row) => {
+    if (reachKind !== 'any' && row.kind !== reachKind) return false;
+
+    if (reachState === 'chase' && !chaseDue(row)) return false;
+
+    if (reachState === 'open') {
+      const entry = reachStateEntry(row.status);
+      if (entry && entry.stage === 'done') return false;
+    }
+
+    if (reachState !== 'any' && reachState !== 'chase' && reachState !== 'open'
+        && row.status !== reachState) return false;
+
+    if (!needle) return true;
+
+    return [row.name, row.contact, row.email, row.area, row.notes]
+      .filter(Boolean)
+      .some((field) => String(field).toLowerCase().includes(needle));
+  });
+}
+
+// ---- the chips ----
+
+function buildOutreachChips() {
+  const kinds = [['any', 'Everything']]
+    .concat(OUTREACH_KINDS.map((k) => [k.value, k.word]));
+
+  el('okindchips').innerHTML = kinds.map(([value, text]) => `
+    <button type="button" class="chip${value === reachKind ? ' on' : ''}"
+            data-o-kind="${escapeAttr(value)}">${escapeText(text)}</button>`).join('');
+
+  const states = [['any', 'Everyone'], ['chase', 'Due a chase'], ['open', 'Not finished']]
+    .concat(OUTREACH_STATES.map((s) => [s.value, s.word]));
+
+  el('ostatuschips').innerHTML = states.map(([value, text]) => `
+    <button type="button" class="chip${value === reachState ? ' on' : ''}"
+            data-o-state="${escapeAttr(value)}">${escapeText(text)}</button>`).join('');
+}
+
+el('okindchips').addEventListener('click', (event) => {
+  const chip = event.target.closest('button[data-o-kind]');
+  if (!chip || chip.dataset.oKind === reachKind) return;
+  reachKind = chip.dataset.oKind;
+  renderOutreach();
+});
+
+el('ostatuschips').addEventListener('click', (event) => {
+  const chip = event.target.closest('button[data-o-state]');
+  if (!chip || chip.dataset.oState === reachState) return;
+  reachState = chip.dataset.oState;
+  renderOutreach();
+});
+
+let reachSearchTimer = null;
+el('oq').addEventListener('input', (event) => {
+  reachSearch = event.target.value;
+  clearTimeout(reachSearchTimer);
+  reachSearchTimer = setTimeout(renderOutreach, 140);
+});
+
+// ---- the three figures, and the chase strip under them ----
+
+function updateOutreachTally() {
+  const stageOf = (row) => (reachStateEntry(row.status) || {}).stage || 'todo';
+
+  const todo    = reach.filter((row) => stageOf(row) === 'todo');
+  const waiting = reach.filter((row) => (reachStateEntry(row.status) || {}).chase);
+  const won     = reach.filter((row) => row.status === 'won');
+
+  // Anything that isn't still sat on the list waiting to be written to
+  // has been written to, which is the number a conversion rate wants
+  // underneath it.
+  const written = reach.filter((row) => stageOf(row) !== 'todo').length;
+
+  const ready = todo.filter((row) => row.email).length;
+  const due   = reach.filter(chaseDue);
+
+  el('o_todo').textContent = todo.length;
+  el('o_todo_sub').textContent = todo.length
+    ? (ready === todo.length ? 'all with an email' : ready + ' with an email')
+    : 'nothing waiting';
+
+  el('o_wait').textContent = waiting.length;
+  el('o_wait_sub').textContent = due.length
+    ? due.length + ' due a chase'
+    : 'none due yet';
+
+  el('o_won').textContent = won.length;
+  el('o_won_sub').textContent = written
+    ? 'from ' + written + ' written to'
+    : 'none written yet';
+
+  // The strip only appears when it has something to say. A line that
+  // reads 'nothing due' every day is a line you stop seeing.
+  if (!due.length) {
+    hide('o_chase');
+    return;
+  }
+
+  const names = due.slice(0, 3).map((row) => row.name).join(', ');
+  el('o_chase').textContent = due.length + ' due a chase — ' + names
+    + (due.length > 3 ? ' and ' + (due.length - 3) + ' more' : '');
+  show('o_chase');
+}
+
+// ---- the list ----
+
+function renderOutreach() {
+  buildOutreachChips();
+  renderMessage();
+  updateOutreachTally();
+
+  const rows = visibleOutreach();
+
+  const what = reachKind === 'any' ? '' : reachKindWord(reachKind);
+  const where = reachState === 'any' ? 'Everyone'
+    : reachState === 'chase' ? 'Due a chase'
+    : reachState === 'open' ? 'Not finished'
+    : reachStateWord(reachState);
+
+  el('olabel').textContent = what ? what + ' — ' + where.toLowerCase() : where;
+  el('ocount').textContent = rows.length + (rows.length === 1 ? ' business' : ' businesses');
+
+  if (!rows.length) {
+    el('olist').innerHTML = reach.length
+      ? '<div class="empty">Nothing matches that.</div>'
+      : '<div class="empty">Nobody on the list yet. Add the first one above, '
+        + 'then press Write when you\'re ready to send.</div>';
+    return;
+  }
+
+  // Grouped in the order OUTREACH_STATES is written, then anything
+  // saved under a word that's since been deleted, on the end.
+  const known = OUTREACH_STATES.map((s) => s.value);
+  const extra = [];
+  rows.forEach((row) => {
+    const key = row.status || 'to_contact';
+    if (!known.includes(key) && !extra.includes(key)) extra.push(key);
+  });
+
+  el('olist').innerHTML = known.concat(extra).map((key) => {
+    const group = rows.filter((row) => (row.status || 'to_contact') === key);
+    if (!group.length) return '';
+
+    const due = group.filter(chaseDue).length;
+
+    const head = `
+      <div class="kithead">
+        <span class="kh">
+          <span class="swatch" style="background:var(${reachStateTone(key)})"></span>
+          ${escapeText(reachStateWord(key))}
+        </span>
+        <span class="kt">${group.length}${due ? ' &middot; ' + due + ' due' : ''}</span>
+      </div>`;
+
+    return head + group.map(reachRowHTML).join('');
+  }).join('');
+}
+
+function reachRowHTML(row) {
+  const kind = reachKindWord(row.kind);
+  const tone = reachStateTone(row.status);
+
+  // Who and where, on one line, with the bits that aren't filled in
+  // left out rather than left as gaps.
+  const meta = [row.contact, row.email || row.phone, row.area]
+    .filter(Boolean).map(escapeText).join(' &middot; ');
+
+  const when = chaseDue(row)
+    ? `<div class="owhen due">chase ${escapeText(dotDate(row.chase_on))}</div>`
+    : row.chase_on
+      ? `<div class="owhen">chase ${escapeText(dotDate(row.chase_on))}</div>`
+      : row.sent_on
+        ? `<div class="owhen">sent ${escapeText(dotDate(row.sent_on))}</div>`
+        : '';
+
+  return `
+    <div class="shootwrap oitem" data-o-row="${escapeAttr(row.id)}"
+         style="border-left-color:${reachKindColour(row.kind)}">
+      <div class="orow">
+        <div class="mid" data-o-open="${escapeAttr(row.id)}">
+          <div class="oname">${escapeText(row.name)}</div>
+          ${meta ? `<div class="ometa">${meta}</div>` : ''}
+          ${row.notes ? `<div class="onote">${escapeText(row.notes)}</div>` : ''}
+          <div class="okind">${escapeText(kind)}</div>
+        </div>
+        <div class="end">
+          <button type="button" class="pill write" data-o-write="${escapeAttr(row.id)}">Write</button>
+          <button type="button" class="pill st" data-o-status="${escapeAttr(row.id)}"
+                  style="color:var(${tone});border-color:var(${tone})"
+                  >${escapeText(reachStateWord(row.status))}</button>
+          ${when}
+        </div>
+      </div>
+    </div>`;
+}
+
+function findReach(id) {
+  return reach.find((row) => String(row.id) === String(id)) || null;
+}
+
+// ---- moving a row along ----
+
+function closeReachPicker() {
+  const open = document.querySelector('#olist .omenu');
+  if (open) open.remove();
+}
+
+function openReachPicker(button) {
+  const wrap = button.closest('.oitem');
+  const open = document.querySelector('#olist .omenu');
+  const wasMine = open && open.parentElement === wrap;
+
+  closeReachPicker();
+  if (wasMine) return;              // tapping the same pill again shuts it
+
+  const row = findReach(button.dataset.oStatus);
+  if (!row) return;
+
+  const now = row.status || 'to_contact';
+
+  const chips = OUTREACH_STATES.map((s) => {
+    const tone = tokenValue(s.tone);
+    const style = s.value === now
+      ? `background:${tone};border-color:${tone};color:${readableOn(s.tone)}`
+      : `color:${tone};border-color:${tone}`;
+
+    return `
+      <button type="button" class="chip stchip${s.value === now ? ' on' : ''}"
+              data-o-set="${escapeAttr(s.value)}" style="${style}"
+              >${escapeText(s.word)}</button>`;
+  }).join('');
+
+  const menu = document.createElement('div');
+  menu.className = 'menu omenu';
+  menu.dataset.id = row.id;
+  menu.innerHTML = `
+    <div class="label">Where it's got to</div>
+    <div class="chips">${chips}</div>
+    <div class="error hidden"></div>`;
+
+  wrap.appendChild(menu);
+}
+
+// Returns null if it went through, or the reason it didn't.
+async function patchReach(id, patch) {
+  const { data, error } = await supabase
+    .from('outreach').update(patch).eq('id', id).select('id');
+
+  // A refusal comes back with no error and no rows. Asking for the rows
+  // back is the only way to tell the difference.
+  if (error) return error.message;
+  if (!data || !data.length) return 'Nothing changed — the database refused it.';
+  return null;
+}
+
+// Setting the word also sets the dates that go with it, because a row
+// that says 'Sent' with no date on it is a row you can't chase.
+function datesFor(row, value) {
+  const entry = reachStateEntry(value);
+  const patch = { status: value };
+
+  if (!entry) return patch;
+
+  if (entry.stage !== 'todo' && !row.sent_on) patch.sent_on = todayISO();
+
+  // Only the two states that are actually waiting on somebody else
+  // carry a chase date. Anything else and it comes off — a date left
+  // on a row that's already replied is a date that lies at you.
+  patch.chase_on = entry.chase ? addDays(todayISO(), FOLLOW_UP_DAYS) : null;
+
+  return patch;
+}
+
+el('olist').addEventListener('click', async (event) => {
+  const set = event.target.closest('button[data-o-set]');
+  if (set) {
+    const menu = set.closest('.omenu');
+    const row = findReach(menu.dataset.id);
+    if (!row) return;
+
+    const box = menu.querySelector('.error');
+    box.classList.add('hidden');
+
+    const problem = await patchReach(row.id, datesFor(row, set.dataset.oSet));
+
+    if (problem) {
+      box.textContent = problem;
+      box.classList.remove('hidden');
+      return;
+    }
+
+    closeReachPicker();
+    flash('Now says ' + reachStateWord(set.dataset.oSet).toLowerCase() + '.');
+    loadOutreach();
+    return;
+  }
+
+  const pill = event.target.closest('button[data-o-status]');
+  if (pill) { openReachPicker(pill); return; }
+
+  const write = event.target.closest('button[data-o-write]');
+  if (write) { writeTo(findReach(write.dataset.oWrite)); return; }
+
+  // Anywhere else on the row opens it for editing, same as kit.
+  const open = event.target.closest('[data-o-open]');
+  if (open) {
+    const row = findReach(open.dataset.oOpen);
+    if (row) startEditReach(row);
+  }
+});
+
+// ---- pressing Write ----
+//
+// Opens your mail app with the right message already in it, and moves a
+// row that hasn't been written to yet on to Sent with a chase date a
+// week out. The flash says so, and the pill next to it puts it back in
+// one tap, so nothing happens silently that you can't see or undo.
+
+async function writeTo(row) {
+  if (!row) return;
+
+  if (!row.email) {
+    flash('No email on that one yet — add one and it’ll be one tap.');
+    startEditReach(row);
+    return;
+  }
+
+  const note = messageFor(row.kind, row);
+
+  const href = 'mailto:' + encodeURIComponent(row.email)
+    + '?subject=' + encodeURIComponent(note.subject)
+    + '&body=' + encodeURIComponent(note.body);
+
+  window.location.href = href;
+
+  const entry = reachStateEntry(row.status);
+  if (entry && entry.stage !== 'todo') return;
+
+  const problem = await patchReach(row.id, datesFor(row, 'sent'));
+  if (problem) { flash(problem); return; }
+
+  flash('Marked as sent, chase set for ' + dotDate(addDays(todayISO(), FOLLOW_UP_DAYS)) + '.');
+  loadOutreach();
+}
+
+// ---- adding and editing ----
+
+let editingReach = null;
+
+function fillReachSelects() {
+  el('f_o_kind').innerHTML = OUTREACH_KINDS.map((k) => `
+    <option value="${escapeAttr(k.value)}">${escapeText(k.word + ' — ' + k.hint)}</option>`).join('');
+
+  el('f_o_status').innerHTML = OUTREACH_STATES.map((s) => `
+    <option value="${escapeAttr(s.value)}">${escapeText(s.word)}</option>`).join('');
+}
+
+fillReachSelects();
+
+function openReachForm() {
+  editingReach = null;
+  hide('reacherror');
+  hide('flash');
+  closeReachPicker();
+
+  el('newreach').reset();
+
+  // Whatever the kind chips are set to is almost always what you're
+  // adding, because you work through one sort at a time.
+  if (reachKind !== 'any') setSelect('f_o_kind', reachKind);
+  setSelect('f_o_status', 'to_contact');
+
+  el('reachtitle').textContent = 'Add a business';
+  el('savereach').textContent = 'Save business';
+  hide('deletereach');
+  show('newreach');
+  el('f_o_name').focus();
+}
+
+function startEditReach(row) {
+  editingReach = row;
+  hide('reacherror');
+  hide('flash');
+  closeReachPicker();
+
+  el('newreach').reset();
+  el('f_o_name').value    = row.name || '';
+  el('f_o_area').value    = row.area || '';
+  el('f_o_contact').value = row.contact || '';
+  el('f_o_email').value   = row.email || '';
+  el('f_o_phone').value   = row.phone || '';
+  el('f_o_notes').value   = row.notes || '';
+  el('f_o_sent').value    = row.sent_on || '';
+  el('f_o_chase').value   = row.chase_on || '';
+  setSelect('f_o_kind', row.kind);
+  setSelect('f_o_status', row.status || 'to_contact');
+
+  el('reachtitle').textContent = 'Edit business';
+  el('savereach').textContent = 'Save changes';
+  el('deletereach').textContent = 'Delete this business';
+  el('deletereach').dataset.armed = '';
+  el('deletereach').classList.remove('armed');
+  show('deletereach');
+  show('newreach');
+  el('newreach').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function closeReachForm() {
+  editingReach = null;
+  hide('newreach');
+}
+
+el('openreach').addEventListener('click', openReachForm);
+el('cancelreach').addEventListener('click', closeReachForm);
+
+el('deletereach').addEventListener('click', async () => {
+  if (!editingReach) return;
+  const button = el('deletereach');
+
+  if (button.dataset.armed !== '1') {
+    button.dataset.armed = '1';
+    button.classList.add('armed');
+    button.textContent = 'Tap again to delete';
+    setTimeout(() => {
+      button.dataset.armed = '';
+      button.classList.remove('armed');
+      button.textContent = 'Delete this business';
+    }, 5000);
+    return;
+  }
+
+  button.textContent = 'Deleting…';
+  const { data, error } = await supabase
+    .from('outreach').delete().eq('id', editingReach.id).select('id');
+
+  if (error || !data || !data.length) {
+    button.dataset.armed = '';
+    button.classList.remove('armed');
+    button.textContent = 'Delete this business';
+    el('reacherror').textContent = error ? error.message : 'The database refused that.';
+    show('reacherror');
+    return;
+  }
+
+  closeReachForm();
+  flash('That’s off the list.');
+  loadOutreach();
+});
+
+el('newreach').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  hide('reacherror');
+
+  const name = el('f_o_name').value.trim();
+
+  if (!name) {
+    el('reacherror').textContent = 'It needs a name before it can be saved.';
+    show('reacherror');
+    return;
+  }
+
+  const status = el('f_o_status').value;
+  const entry = reachStateEntry(status);
+
+  const row = {
+    name:     name,
+    kind:     el('f_o_kind').value,
+    area:     el('f_o_area').value.trim() || null,
+    contact:  el('f_o_contact').value.trim() || null,
+    email:    el('f_o_email').value.trim() || null,
+    phone:    el('f_o_phone').value.trim() || null,
+    notes:    el('f_o_notes').value.trim() || null,
+    status:   status,
+    sent_on:  el('f_o_sent').value || null,
+    chase_on: el('f_o_chase').value || null
+  };
+
+  // Set by hand to something that's waiting on a reply, with no chase
+  // date filled in? Then the form fills it in, the same week out that
+  // pressing Write would have used. One less thing to remember.
+  if (entry && entry.chase && !row.chase_on) {
+    row.chase_on = addDays(row.sent_on || todayISO(), FOLLOW_UP_DAYS);
+  }
+
+  el('savereach').disabled = true;
+  el('savereach').textContent = 'Saving…';
+
+  let problem = null;
+
+  if (editingReach) {
+    problem = await patchReach(editingReach.id, row);
+  } else {
+    if (teamId) row.team_id = teamId;
+    const { data, error } = await supabase.from('outreach').insert(row).select('id');
+    if (error) problem = error.message;
+    else if (!data || !data.length) problem = 'The database refused that.';
+  }
+
+  el('savereach').disabled = false;
+  el('savereach').textContent = editingReach ? 'Save changes' : 'Save business';
+
+  if (problem) {
+    el('reacherror').textContent = problem;
+    show('reacherror');
+    return;
+  }
+
+  const wasEdit = !!editingReach;
+  closeReachForm();
+  flash(wasEdit ? 'Business updated.' : 'Added to the list.');
+  loadOutreach();
+});
+
+// ---- out to a spreadsheet ----
+//
+// Whatever the chips are set to is what comes out, so you can hand
+// somebody one sort of business, or take the whole list somewhere else.
+
+el('downloadreachcsv').addEventListener('click', () => {
+  const rows = visibleOutreach();
+  if (!rows.length) { flash('Nothing to export in that view.'); return; }
+
+  const head = ['BUSINESS', 'WHAT THEY ARE', 'WHERE', 'CONTACT', 'EMAIL',
+                'PHONE', 'STATUS', 'WRITTEN', 'CHASE', 'NOTES'];
+
+  const order = (row) => {
+    const i = OUTREACH_STATES.findIndex((s) => s.value === row.status);
+    return i === -1 ? OUTREACH_STATES.length : i;
+  };
+
+  const body = rows
+    .slice()
+    .sort((a, b) => order(a) - order(b) || String(a.name).localeCompare(String(b.name)))
+    .map((row) => [
+      row.name,
+      reachKindWord(row.kind),
+      row.area || '',
+      row.contact || '',
+      row.email || '',
+      row.phone || '',
+      reachStateWord(row.status),
+      row.sent_on ? dotDate(row.sent_on) : '',
+      row.chase_on ? dotDate(row.chase_on) : '',
+      row.notes || ''
+    ]);
+
+  // The BOM is what stops Excel mangling the accented letters.
+  const csv = '\ufeff' + [head].concat(body)
+    .map((cols) => cols.map(csvCell).join(',')).join('\r\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.download = safeFilename('BGL Media outreach ' + todayISO()) + '.csv';
   link.click();
 
   URL.revokeObjectURL(url);
