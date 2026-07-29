@@ -702,7 +702,12 @@ const COLUMNS = 'id, shoot_date, call_time, venue, client, fee, job_type, status
 // The fees have to land before anything draws, or the first paint shows
 // the schedule fee where the client fee belongs and then corrects itself.
 async function refresh() {
-  await loadFees();
+  // Both of these have to land before anything draws. The fees decide
+  // which number a row shows, and the kit rows decide whether a row
+  // carries a marker — both would otherwise paint once wrong and then
+  // correct themselves, which looks like a bug and reads like one.
+  await Promise.all([loadFees(), loadShootKit()]);
+
   await Promise.all([
     loadAll(), loadShoots(), loadInvoices(), loadEntries(), loadKit(), loadOutreach()
   ]);
@@ -949,14 +954,23 @@ function renderDay() {
     return;
   }
 
-  const shootRows = rows.map((s) => `
+  const shootRows = rows.map((s) => {
+    // What's going out that day, so the calendar answers "what am I
+    // loading into the van" without a trip to the schedule.
+    const packed = canKit ? packedCount(s.id) : 0;
+    const kitLine = packed
+      ? ` &middot; ${packed} ${packed === 1 ? 'piece' : 'pieces'} of kit`
+      : '';
+
+    return `
     <div class="mini" style="border-left-color:${crewColour(s.crew)}">
       <div>
         <div class="mv">${escapeText(s.venue)} ${crewTag(s.crew)}</div>
-        <div class="mm">${escapeText(s.client || '—')}${s.call_time ? ' &middot; ' + escapeText(shortTime(s.call_time)) : ''}</div>
+        <div class="mm">${escapeText(s.client || '—')}${s.call_time ? ' &middot; ' + escapeText(shortTime(s.call_time)) : ''}${kitLine}</div>
       </div>
       <div class="mf">${money(feeInfo(s).headline)}</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   // Travel days say which job is holding them and which way you're going,
   // so a held day is never a mystery.
@@ -1060,7 +1074,7 @@ function rowHTML(shoot) {
         <div class="mid">
           <div class="venue">${escapeText(shoot.venue)}</div>
           <div class="client">${escapeText(shoot.client || '—')}</div>
-          <div class="type">${escapeText(shoot.job_type)} ${crewTag(shoot.crew)}${travelMark(shoot)}</div>
+          <div class="type">${escapeText(shoot.job_type)} ${crewTag(shoot.crew)}${travelMark(shoot)}${canKit ? kitMark(shoot) : ''}</div>
         </div>
         <div class="end">
           ${feeHTML(shoot)}
@@ -1074,6 +1088,9 @@ function rowHTML(shoot) {
         <div class="label">Status</div>
         <div class="chips">${statusChips}</div>
         ${shareChip(shoot)}
+        ${canKit ? `
+        <div class="label">Kit for this job</div>
+        <div class="kitbox" data-kitbox="${escapeAttr(shoot.id)}"></div>` : ''}
         <div class="chips">
           <button type="button" class="chip" data-act="edit" data-id="${escapeAttr(shoot.id)}">Edit details</button>
           <button type="button" class="chip danger" data-act="delete" data-id="${escapeAttr(shoot.id)}">Delete</button>
@@ -1146,12 +1163,93 @@ el('list').addEventListener('click', async (event) => {
       menu.classList.remove('hidden');
       button.classList.add('open');
       button.setAttribute('aria-expanded', 'true');
+      // Drawn on opening rather than with the row, so a screen of
+      // fourteen jobs isn't fourteen copies of the whole kit list.
+      if (canKit) renderKitBox(id);
     }
     return;
   }
 
   if (act === 'edit') {
     startEdit(id);
+    return;
+  }
+
+  // ---- kit on this job ----
+  //
+  // None of these call refresh(). Refreshing redraws the list, which
+  // shuts the menu you're stood in — so the in-memory list is kept in
+  // step by hand and only this one box is redrawn.
+
+  // A refusal from a moment ago shouldn't still be sat there after the
+  // next tap works.
+  if (act.startsWith('kit')) {
+    const box = menu.querySelector('.error');
+    if (box) box.classList.add('hidden');
+  }
+
+  if (act === 'kitpick') {
+    const key = String(id);
+    if (kitPickerOpen.has(key)) kitPickerOpen.delete(key);
+    else kitPickerOpen.add(key);
+    renderKitBox(id);
+    return;
+  }
+
+  if (act === 'kiton' || act === 'kitoff') {
+    button.disabled = true;
+
+    const problem = act === 'kiton'
+      ? await packKit(id, [button.dataset.kit])
+      : await unpackKit(id, [button.dataset.kit]);
+
+    if (problem) { button.disabled = false; menuError(menu, problem); return; }
+    renderKitBox(id);
+    renderKit();
+    return;
+  }
+
+  if (act === 'kitall') {
+    const tag  = button.dataset.owner;
+    const have = packedIds(id);
+    const want = kit
+      .filter((item) => item.owner_tag === tag && !have.has(String(item.id)))
+      .map((item) => item.id);
+
+    if (!want.length) return;
+
+    button.disabled = true;
+    const problem = await packKit(id, want);
+    if (problem) { button.disabled = false; menuError(menu, problem); return; }
+
+    const shoot = findShoot(id);
+    const who = (crewEntry(tag) || {}).name || tag;
+    flash(want.length + ' of ' + who + '’s kit packed for '
+      + (shoot ? shoot.venue : 'that job') + '.');
+    renderKitBox(id);
+    renderKit();
+    return;
+  }
+
+  if (act === 'kitclear') {
+    if (button.dataset.armed !== '1') {
+      button.dataset.armed = '1';
+      button.textContent = 'Tap again to clear';
+      setTimeout(() => {
+        button.dataset.armed = '';
+        button.textContent = 'Clear the lot';
+      }, 5000);
+      return;
+    }
+
+    button.disabled = true;
+    const problem = await unpackKit(id, Array.from(packedIds(id)));
+    if (problem) { button.disabled = false; menuError(menu, problem); return; }
+
+    const shoot = findShoot(id);
+    flash('Kit cleared off ' + (shoot ? shoot.venue : 'that job') + '.');
+    renderKitBox(id);
+    renderKit();
     return;
   }
 
@@ -3249,6 +3347,27 @@ function renderKit() {
   }).join('');
 }
 
+// Where a piece is going next, and how many more times after that. Only
+// jobs from today on — a camera that went out in March isn't news, and
+// the question this line answers is "where's the FX3 on Saturday".
+function kitJobsNote(item) {
+  const today = todayISO();
+  const jobs  = jobsForKit(item.id).filter((shoot) => shoot.shoot_date >= today);
+  if (!jobs.length) return '';
+
+  const next = jobs[0];
+  const more = jobs.length - 1;
+
+  // Same rule as the warning inside a shoot's menu: more jobs on one day
+  // than you own of the thing.
+  const doubled = jobs.filter((shoot) => shoot.shoot_date === next.shoot_date).length
+    > kitQty(item);
+
+  return `<div class="knote"${doubled ? ' style="color:var(--danger)"' : ''}>${
+    doubled ? '&#9888; ' : ''}Out ${escapeText(longDate(next.shoot_date))} &mdash; ${
+    escapeText(next.venue)}${more ? ` (+${more} more)` : ''}</div>`;
+}
+
 function kitRowHTML(item) {
   const qty = kitQty(item);
   const many = qty > 1;
@@ -3265,6 +3384,7 @@ function kitRowHTML(item) {
           <div class="kname">${escapeText(item.name)}${
             many ? ` <span class="qty">&times;${qty}</span>` : ''}</div>
           ${item.notes ? `<div class="knote">${escapeText(item.notes)}</div>` : ''}
+          ${kitJobsNote(item)}
           ${item.serial ? `<div class="kser">${escapeText(item.serial)}</div>` : ''}
         </div>
         <div class="end">
@@ -3495,6 +3615,308 @@ el('downloadkitcsv').addEventListener('click', () => {
 
   URL.revokeObjectURL(url);
 });
+
+// ============================================================
+// Kit on a job
+//
+// Which pieces are going out on which shoot. It's a list of its own
+// rather than a column on either side, because one camera goes out on
+// forty jobs and one job takes forty pieces — neither of those fits in
+// a box on the other one's row.
+//
+// Nothing is copied across. A row here is a pointer at the thing on the
+// kit list, so renaming the FX3 renames it on every job it's ever been
+// on, and selling it takes it off every job at once rather than leaving
+// last March pointing at a camera you haven't got.
+//
+// The whole lot is loaded once on refresh and kept in memory, because
+// packing a job is six taps in a row and going back to the database
+// between each one is six waits you can feel on a phone in a car park.
+// ============================================================
+
+let shootKit = [];
+
+// Which jobs have their full kit list open. Held per job, so opening
+// one doesn't shut another, and kept across a redraw of the box.
+const kitPickerOpen = new Set();
+
+async function loadShootKit() {
+  if (!canKit) { shootKit = []; return; }
+
+  const { data, error } = await supabase
+    .from('shoot_kit')
+    .select('id, shoot_id, kit_id');
+
+  shootKit = error ? [] : (data || []);
+}
+
+// ---- reading it ----
+
+const sameId = (a, b) => String(a) === String(b);
+
+function packedIds(shootId) {
+  const out = new Set();
+  shootKit.forEach((row) => {
+    if (sameId(row.shoot_id, shootId)) out.add(String(row.kit_id));
+  });
+  return out;
+}
+
+// Counted off the join rows rather than the kit list, so the marker on a
+// schedule row is right even on the split second before the kit list
+// itself has landed.
+function packedCount(shootId) {
+  return shootKit.filter((row) => sameId(row.shoot_id, shootId)).length;
+}
+
+// The actual kit on a job, grouped the way the kit screen groups it so
+// the two screens read the same way round.
+function packedKit(shootId) {
+  const ids = packedIds(shootId);
+  const order = KIT_CATEGORIES.map((c) => c.value);
+  const rank = (item) => {
+    const i = order.indexOf(item.category);
+    return i === -1 ? order.length : i;
+  };
+
+  return kit
+    .filter((item) => ids.has(String(item.id)))
+    .sort((a, b) => rank(a) - rank(b) || String(a.name).localeCompare(String(b.name)));
+}
+
+function packedValue(shootId) {
+  return packedKit(shootId).reduce((total, item) => total + kitLineValue(item), 0);
+}
+
+// Every job a given piece is on, soonest first.
+function jobsForKit(kitId) {
+  const ids = shootKit
+    .filter((row) => sameId(row.kit_id, kitId))
+    .map((row) => String(row.shoot_id));
+
+  return allShoots
+    .filter((shoot) => ids.includes(String(shoot.id)))
+    .sort(byDateAscending);
+}
+
+// Two jobs on the same day both wanting the one camera. The count is
+// what decides it, not the fact of a double booking — five memory cards
+// on two jobs is fine, two jobs wanting the same single FX3 is not.
+function kitClashes(shoot) {
+  const clashes = [];
+
+  packedKit(shoot.id).forEach((item) => {
+    const sameDay = jobsForKit(item.id)
+      .filter((other) => other.shoot_date === shoot.shoot_date);
+
+    if (sameDay.length > kitQty(item)) {
+      clashes.push({
+        item: item,
+        others: sameDay.filter((other) => !sameId(other.id, shoot.id))
+      });
+    }
+  });
+
+  return clashes;
+}
+
+// ---- changing it ----
+//
+// Each of these hands back null when it worked and a sentence when it
+// didn't, same as changeRow does for shoots. The in-memory list is kept
+// in step by hand rather than by reloading, so the menu you're standing
+// in doesn't shut under you between taps.
+
+async function packKit(shootId, kitIds) {
+  const have = packedIds(shootId);
+  const wanted = kitIds.filter((id) => !have.has(String(id)));
+  if (!wanted.length) return null;
+
+  const rows = wanted.map((id) => {
+    const row = { shoot_id: shootId, kit_id: id };
+    if (teamId) row.team_id = teamId;
+    return row;
+  });
+
+  const { data, error } = await supabase
+    .from('shoot_kit').insert(rows).select('id, shoot_id, kit_id');
+
+  // Two people packing the same camera at the same moment trips the
+  // no-duplicates rule. That isn't a failure — it's already on the job,
+  // which is what was being asked for.
+  if (error && error.code === '23505') return null;
+  if (error) return error.message;
+  if (!data || !data.length) {
+    return 'Nothing was added — the database refused it. That usually means '
+      + 'this account isn\'t allowed near the kit list.';
+  }
+
+  shootKit = shootKit.concat(data);
+  return null;
+}
+
+async function unpackKit(shootId, kitIds) {
+  const have = packedIds(shootId);
+  const going = kitIds.filter((id) => have.has(String(id)));
+  if (!going.length) return null;
+
+  const { data, error } = await supabase
+    .from('shoot_kit').delete()
+    .eq('shoot_id', shootId)
+    .in('kit_id', going)
+    .select('id');
+
+  if (error) return error.message;
+  if (!data || !data.length) return 'Nothing changed — the database refused it.';
+
+  const gone = new Set(going.map(String));
+  shootKit = shootKit.filter(
+    (row) => !(sameId(row.shoot_id, shootId) && gone.has(String(row.kit_id))));
+  return null;
+}
+
+// ---- the box inside a shoot's menu ----
+
+function kitBoxHTML(shoot) {
+  const id     = String(shoot.id);
+  const packed = packedKit(id);
+  const count  = packedCount(id);
+  const open   = kitPickerOpen.has(id);
+  const have   = packedIds(id);
+
+  // The count comes off the join rows and the list comes off the kit
+  // list, so if the two disagree something has been deleted from the kit
+  // screen and these rows are pointing at nothing. Say so rather than
+  // quietly showing a smaller number.
+  const orphans = count - packed.length;
+
+  const summary = count
+    ? `${count} ${count === 1 ? 'piece' : 'pieces'}`
+      + (packedValue(id) ? ' &middot; ' + money(packedValue(id)) : '')
+      + (orphans > 0 ? ` &middot; ${orphans} no longer on the kit list` : '')
+    : 'Nothing packed for this one yet.';
+
+  // One tap for the usual case: this is Ben's job, so it takes Ben's
+  // kit. The number is how many would be added, so a chip that says
+  // nothing to add says so instead of pretending to do something.
+  const ownerChips = CREW.map((c) => {
+    const mine    = kit.filter((item) => item.owner_tag === c.tag);
+    const missing = mine.filter((item) => !have.has(String(item.id))).length;
+    if (!mine.length) return '';
+
+    return `
+        <button type="button" class="chip${missing ? '' : ' on'}"
+                data-act="kitall" data-id="${escapeAttr(id)}"
+                data-owner="${escapeAttr(c.tag)}"${missing ? '' : ' disabled'}>
+          <span class="swatch" style="background:var(${c.accent})"></span>${
+            escapeText(c.name)}${missing ? ' +' + missing : ' &check;'}</button>`;
+  }).join('');
+
+  const clearChip = count
+    ? `<button type="button" class="chip danger" data-act="kitclear"
+               data-id="${escapeAttr(id)}">Clear the lot</button>`
+    : '';
+
+  // What's on it, each one its own tap to take back off again.
+  const packedChips = packed.map((item) => `
+        <button type="button" class="chip on" data-act="kitoff"
+                data-id="${escapeAttr(id)}" data-kit="${escapeAttr(item.id)}"
+                title="Take off this job">
+          <span class="swatch" style="background:${kitCategoryColour(item.category)}"></span>${
+            escapeText(item.name)}${kitQty(item) > 1 ? ' &times;' + kitQty(item) : ''} &times;</button>`).join('');
+
+  const clashes = kitClashes(shoot);
+  const clashHTML = clashes.length ? `
+        <div class="error" style="margin-top:8px">${clashes.map((clash) => {
+          const where = clash.others.map((o) => escapeText(o.venue)).join(', ');
+          return `${escapeText(clash.item.name)} is also down for ${where} that day`
+            + (kitQty(clash.item) > 1 ? ` &mdash; you've got ${kitQty(clash.item)}` : '') + '.';
+        }).join('<br>')}</div>` : '';
+
+  return `
+      <div class="sub" style="margin:2px 0 8px">${summary}</div>
+      <div class="chips">${ownerChips}${clearChip}</div>
+      ${packedChips ? `<div class="chips">${packedChips}</div>` : ''}
+      ${clashHTML}
+      <div class="chips">
+        <button type="button" class="chip${open ? ' on' : ''}" data-act="kitpick"
+                data-id="${escapeAttr(id)}">${
+          open ? 'Done picking' : 'Pick from the list'}</button>
+      </div>
+      ${open ? kitPickerHTML(shoot) : ''}`;
+}
+
+// The full kit list, grouped, every piece a tap. Only drawn for the one
+// job whose picker is open — forty pieces across fourteen jobs is six
+// hundred buttons nobody asked for.
+function kitPickerHTML(shoot) {
+  if (!kit.length) {
+    return '<div class="empty">Nothing on the kit list yet. Add it on the Kit screen.</div>';
+  }
+
+  const id   = String(shoot.id);
+  const have = packedIds(id);
+  const known = KIT_CATEGORIES.map((c) => c.value);
+
+  const extra = [];
+  kit.forEach((item) => {
+    const key = item.category || 'other';
+    if (!known.includes(key) && !extra.includes(key)) extra.push(key);
+  });
+
+  return known.concat(extra).map((key) => {
+    const group = kit.filter((item) => (item.category || 'other') === key);
+    if (!group.length) return '';
+
+    const chips = group
+      .slice()
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+      .map((item) => {
+        const on = have.has(String(item.id));
+        return `
+        <button type="button" class="chip${on ? ' on' : ''}"
+                data-act="${on ? 'kitoff' : 'kiton'}" data-id="${escapeAttr(id)}"
+                data-kit="${escapeAttr(item.id)}">
+          ${crewTag(item.owner_tag)} ${escapeText(item.name)}${
+            kitQty(item) > 1 ? ' &times;' + kitQty(item) : ''}</button>`;
+      }).join('');
+
+    return `
+      <div class="label" style="margin-top:8px">
+        <span class="swatch" style="background:${kitCategoryColour(key)}"></span>${
+          escapeText(kitCategoryWord(key))}</div>
+      <div class="chips">${chips}</div>`;
+  }).join('');
+}
+
+// Redraw one job's box without touching the rest of the screen, so the
+// menu you're standing in stays open and stays where it is.
+function renderKitBox(shootId) {
+  const box = document.querySelector('.kitbox[data-kitbox="' + String(shootId) + '"]');
+  if (!box) return;
+
+  const shoot = findShoot(shootId) || allShoots.find((s) => sameId(s.id, shootId));
+  if (!shoot) return;
+
+  box.innerHTML = kitBoxHTML(shoot);
+
+  // The little marker out on the row itself, kept in step by hand for
+  // the same reason.
+  const wrap = box.closest('.shootwrap');
+  const mark = wrap && wrap.querySelector('[data-kitmark]');
+  if (mark) {
+    const count = packedCount(shootId);
+    mark.textContent = count + ' kit';
+    mark.style.display = count ? '' : 'none';
+  }
+}
+
+// A solid marker on the row, next to the dashed travel one.
+function kitMark(shoot) {
+  const count = packedCount(shoot.id);
+  return `<span class="travelmark" data-kitmark style="border-style:solid${
+    count ? '' : ';display:none'}">${count} kit</span>`;
+}
 
 // ============================================================
 // Outreach
